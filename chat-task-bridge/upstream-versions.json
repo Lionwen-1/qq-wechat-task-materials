@@ -1,0 +1,62 @@
+{
+  "checked_on": "2026-10-30 Asia/Shanghai",
+  "python_tested": "3.10.9 Windows x64",
+  "wechat_client": "4.2.0.9",
+  "qq_client": "9.9.35.52892",
+  "qq_runtime_kernel": "9.9.36-53644",
+  "qq_client_note": "Launcher file version differs from loaded wrapper.node; group-file path binds the actual kernel version and module hashes.",
+  "wechat_read_modules": {
+    "repository": "https://github.com/fanyuantaier/wechatauto-replica",
+    "commit": "6e603974bbac3bda93d88bbd6995510ae2547f5c",
+    "version": "1.2.8.1",
+    "license": "Apache-2.0"
+  },
+  "qq_read_modules": {
+    "repository": "https://github.com/q957506633/qq-nt-export",
+    "commit": "bec1504170f99e2752793320711c5653f3803670",
+    "license": "MIT"
+  },
+  "native_sqlcipher_wheel": {
+    "distribution": "sqlcipher3-wheels==0.5.7",
+    "filename": "sqlcipher3_wheels-0.5.7-cp310-cp310-win_amd64.whl",
+    "sha256": "0ec965564c43e3cd0d2e93530467d9b1a1ef379c98afa0cc349b142777ab7928"
+  },
+  "mcp_sdk": "mcp==2.3.0",
+  "wechat_cdn_reference": {
+    "repository": "https://github.com/rmqg/wechat-digest",
+    "commit": "b2a728bddf3c48dad47f92bb9beeb1fbcc4631fd",
+    "file": "deployment/fetch-originals.py",
+    "license": "MIT",
+    "adaptation": "Windows account binding, bounded image and file retrieval using existing cryptography dependency"
+  },
+  "qq_cdn_reference": {
+    "repository": "https://github.com/NapNeko/NapCatQQ",
+    "commit": "49ecfe0f56c1e0649db6988444950216fd5fe792",
+    "source_copied": false,
+    "note": "Image CDN host and original spec reference only; no shared rkey services or installed NapCat runtime"
+  },
+  "qq_tea_library": {
+    "repository": "https://github.com/LagrangeDev/lagrange-python",
+    "commit": "572d711c5cd23e45c02c5052d4ec0833a3392cf7",
+    "file": "lagrange/utils/crypto/tea.py",
+    "license": "LGPL-2.1",
+    "modified": false,
+    "scope": "Only the independent QQ-TEA source module; no client, login or event listener is imported."
+  },
+  "qq_group_file_protocol_references": [
+    "https://github.com/NapNeko/NapCatQQ/blob/49ecfe0f56c1e0649db6988444950216fd5fe792/packages/napcat-core/packet/transformer/highway/DownloadGroupFile.ts",
+    "https://github.com/weq-devs/QQShark/blob/6bffb74cb7d6efd9d5d1dece7bc0878079a7f5d6/src/scan.rs",
+    "https://github.com/weq-devs/qq_guid_tool/blob/bdd398228662a41eb3d967dc96ae16160b935bad/windows/README.md"
+  ],
+  "no_narrator": true,
+  "no_client_changes": true,
+  "key_persistence": false,
+  "wechat_tested_versions": [
+    "4.1.15.56",
+    "4.2.0.9"
+  ],
+  "wechat_cdn_version_tokens": {
+    "4.1.15.56": "0xf2540f38",
+    "4.2.0.9": "0xf2544009"
+  }
+}

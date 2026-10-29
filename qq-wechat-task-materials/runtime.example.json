@@ -1,0 +1,5 @@
+{
+  "python": "D:/chat-task-bridge/.venv/Scripts/python.exe",
+  "bridge_root": "D:/chat-task-bridge",
+  "config": "D:/chat-task-bridge/config.local.json"
+}

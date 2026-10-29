@@ -1,0 +1,5 @@
+* text=auto eol=lf
+chat-task-bridge/vendor/** -text
+*.zip binary
+*.png binary
+*.jpg binary

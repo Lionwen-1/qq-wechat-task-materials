@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+state/
+downloads/
+config.local.json
+runtime.local.json
+*.db
+*.db-wal
+*.db-shm
+*.key
+.env
+.env.*
+*.log
