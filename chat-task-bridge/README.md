@@ -1,4 +1,4 @@
-# 聊天取材桥 0.5.1
+# 聊天取材桥 0.6.0
 
 按任务读取个人 QQ 和微信中的指定会话，通过 CLI 或 MCP 给本地 Agent 调用。
 
@@ -14,12 +14,12 @@
 - 查历史和查今后的新消息使用同一入口：需要时重新查询，不在后台追踪。
 - 文件和图片优先从本机已有缓存提取，保存 SHA256、消息来源和版本信息。启用 `active_download` 后，只在调用下载工具且指定版本缺失时取回该附件；查询本身不触发下载。不能承诺恢复已过期文件。可选 NapCat API 仍保留，直接读取不需要它。
 - 图片默认取本地原图或接收版，不自动用缩略图替代。显式指定 `thumbnail` 才取预览；`best_available` 允许降级但返回实际版本。
-- 68 项自动化测试和官方 MCP 实际连接通过；不能把这些结果扩大为所有客户端版本均兼容。
+- 95 项自动化测试和官方 MCP 实际连接通过；不能把这些结果扩大为所有客户端版本均兼容。
 
 | 未缓存附件 | 当前能力 | 实机结果 |
 |---|---|---|
 | 微信原图 | 支持 CDN 主动取回 | 本地仅 6,784 字节缩略图，取回 2,895,047 字节、3213×5712 原图，消息 MD5 一致 |
-| 微信文件 | 支持标准 CDN 文件描述 | 取回本地没有的 8,394,592 字节文件，大小和消息 MD5 一致 |
+| 微信文件 | 支持标准 CDN 文件描述 | 取回本地没有的 8,395,592 字节文件，大小和消息 MD5 一致 |
 | QQ 图片 | 支持当前消息中的 NT 图片 CDN 描述 | 取回本地没有的 105,057 字节、864×1920 图片，消息 MD5 一致 |
 | QQ 群文件 | 支持后台申请下载地址后通过 HTTPS 取回 | 本地缓存未命中，取回 82,832 字节 ZIP，大小和消息 MD5 一致；正式 MCP 调用通过 |
 
@@ -51,6 +51,7 @@ Set-Location <本程序目录>
 ./.venv/Scripts/python.exe scope.py resolve --platform qq --chat '课程通知群'
 ./.venv/Scripts/python.exe scope.py allow --platform qq --chat '课程通知群' --purpose '用户直接点名整理实验要求'
 ./.venv/Scripts/python.exe scope.py search --platform qq --chat '课程通知群' --keyword '实验' --purpose '整理本次实验要求'
+./.venv/Scripts/python.exe scope.py search --platform qq --chat '课程通知群' --attachment-kind image --purpose '查实验图片'
 ```
 
 只在用户直接点名并交付任务时登记新群；已有绑定不用重复登记。`allow` 不读消息、不清屏蔽、不改账号绑定。`search` 不自动加入新群，未给日期时先查最近 7 个自然日（北京时间，含今天）；按任务需要有界扩大。任何命中屏蔽的群都不能用本次任务自动解禁。
@@ -69,6 +70,21 @@ Set-Location <本程序目录>
 `--image-tier` 可选：`received`（默认，原图优先、其次接收版）、`original`（只要原图）、`thumbnail`（明确取本地预览）、`best_available`（可取本地缩略图并标记）。微信接收版不等于发送方原图。`--cache-only` 禁止本次网络补取；MCP 对应 `fetch_if_missing=false`。微信主动取图优先取大小上限内的原图；仅请求原图时不降级。QQ CDN 只接受与消息大小和 MD5 一致的源图。
 
 每次下载独立目录，生成 `source.json`：平台、会话别名、消息 ID、消息时间、任务用途、大小、SHA256、保存方式、图片版本与来源 MD5 校验状态。失败目录有 `FAILED.json`，不要把它当成成功结果。程序不会打开或执行附件、宏和安装包。
+
+## 统一结果与离线材料整理
+
+查询返回 `chat-task-messages/v1`，含统一 `scope`、`coverage.returned`、时间边界与 `may_have_more`。`--attachment-kind all|any|image|file` 只在本次有界扫描内筛选；原附件下标不重排，只能下载 `matched_attachment_indices` 中的项。账号重绑、会话变化、过期或旧版无绑定摘要凭据都要求重新查询；查询和下载完成时再次核验过滤。
+
+```powershell
+./.venv/Scripts/python.exe bridge.py materials --receipt <receipt_id>
+./.venv/Scripts/python.exe bridge.py materials --receipt <receipt_id> --message <message_id> --write-bundle
+```
+
+第一条只清点和校验本次已下载材料，返回实际 `local_file_paths`；第二条在本程序输出目录写独立文件夹，含 Markdown、JSON 与相对路径附件，可重复 `--message` 只选任务相关消息。两者都不读取客户端或联网，不补下载；缺失、损坏或超预算明确列出。每次最多500项附件、200文件、100 MiB（也受本机更小上限限制），不会无界复制。材料 JSON 为 `chat-task-materials/v1`；查询覆盖与材料齐全度分开，均不声称完整历史。新屏蔽或账号重绑使清点／整理同样失效，未完成文件夹清理。
+
+## 客户端正常使用优先
+
+同一配置的 QQ／微信读取及材料整理共享非阻塞锁，忙时返回，不后台排队。读取通过无窗口的本桥短期子进程，先降低自身 CPU 优先级及磁盘 I/O 到 very-low；无法应用时停止，不改 QQ／微信的进程优先级。不会抢焦点、点窗口、读写剪贴板、注入、重登、重启或发送消息。数据库读取仍有 CPU／磁盘 I/O，不能承诺零资源开销；若用户反馈卡顿，停止重试并优先利用已有材料。没有新增依赖、常驻同步、全库索引或跨任务密钥缓存。
 
 ## 允许和屏蔽
 
@@ -130,7 +146,7 @@ QQ 本机消息库较大，本次验证约 2.55 GB，所以一次请求需要相
 }
 ```
 
-工具仅有 `bridge_status`、`search_messages`、`download_attachment`。调用端必须遵守用户指向后才查询的要求；程序不能辨认自然语言授权的真实性。网页模型若没有本机执行器，不能直接连接这个本地 stdio 服务。
+工具为 `bridge_status`、`search_messages`、`download_attachment`、`task_materials`；最后一项默认离线清点，`write_bundle=true` 才写本程序材料文件夹。没有新增授权、解禁或任意文件系统工具。调用端必须遵守用户指向后才查询的要求；程序不能辨认自然语言授权的真实性。网页模型若没有本机执行器，不能直接连接本地 stdio 服务。升级后需要重连本桥 MCP 才能刷新工具清单，无需重启 QQ／微信。
 
 ## 验证与上游
 
@@ -154,4 +170,4 @@ QQ 本机消息库较大，本次验证约 2.55 GB，所以一次请求需要相
 
 具体提交、文件哈希及第三方许可证见 `upstream-versions.json`、`vendor/SHA256SUMS.json` 和 `vendor/NOTICE.md`。所有分享产物排除本地配置、账号、群名、密钥、数据库、凭据和附件。
 
-本项目原创代码采用 [MIT](LICENSE)；`vendor` 下的第三方文件继续分别使用原有 Apache-2.0、MIT、LGPL-2.1 许可证，不能将整个 vendor 目录视为 MIT。0.5.1 补齐公开发布格式、许可证与打包文件，并修复 Windows 短路径／目录别名与真实路径比较不一致导致 QQ 账号库核验误拒绝的问题；原有账号与过滤限制保留。
+本项目原创代码采用 [MIT](LICENSE)；`vendor` 下的第三方文件继续分别使用原有 Apache-2.0、MIT、LGPL-2.1 许可证。0.6.0 借鉴 wxq 的共享服务组织、weflow-cli 的版本化结果／媒体覆盖报告及 im-mcp 的材料入口组织；独立实现，没有复制新第三方源码或增加其依赖。现有 vendor、底层读取和下载协议保持原有来源，本轮增强使用合成材料验收，没有为验收再读取真实聊天。

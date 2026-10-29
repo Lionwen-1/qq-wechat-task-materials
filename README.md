@@ -19,8 +19,9 @@
 | 群名＋任务 | 精确定位 QQ 群名／群号，或微信群名／备注／群 ID；同名不猜测 |
 | 历史与新消息 | 按群、日期、关键词查询；新消息在下次按需查询时读取 |
 | 文件与图片 | 读取本地缓存，或主动取回 QQ 图片／标准群文件、微信文件／原图 |
-| 规则与来源 | 屏蔽覆盖允许名单；下载时重新检查；保存来源、大小与 SHA256 |
-| 多模型复用 | JSON CLI，及三个标准 MCP stdio 工具 |
+| 规则与来源 | 屏蔽覆盖允许名单；查询、下载及整理完成时重新检查；保存来源、大小与 SHA256 |
+| 材料整理 | 离线清点已下载附件，生成带相对路径的 Markdown／JSON 材料文件夹；不额外读库或下载 |
+| 多模型复用 | 版本化 JSON CLI，及四个标准 MCP stdio 工具 |
 
 例如对已加载本技能的本地 Agent 说：
 
@@ -68,13 +69,18 @@ Set-Location ..
 # 只有用户直接点名该群并交付任务时才登记；不会自动读消息或解除屏蔽。
 ./.venv/Scripts/python.exe scope.py allow --platform qq --chat '课程通知群' --purpose '用户要求整理实验任务'
 ./.venv/Scripts/python.exe scope.py search --platform qq --chat '课程通知群' --keyword '实验' --purpose '整理实验任务'
+./.venv/Scripts/python.exe scope.py search --platform qq --chat '课程通知群' --attachment-kind image --purpose '查实验图片'
 
 # receipt_id 和 message_id 必须来自本次查询命中结果。
 ./.venv/Scripts/python.exe bridge.py fetch --receipt <receipt_id> --message <message_id> --index 0
 ./.venv/Scripts/python.exe bridge.py fetch --receipt <receipt_id> --message <message_id> --image-tier original
+./.venv/Scripts/python.exe bridge.py materials --receipt <receipt_id>
+./.venv/Scripts/python.exe bridge.py materials --receipt <receipt_id> --message <message_id> --write-bundle
 ```
 
 未给日期先查最近 7 个自然日（Asia/Shanghai）。单次最多 32 天、扫描 500 条、返回 100 条；查看 `coverage` 后按任务逐步扩大。有界零命中不代表全历史没有。查询凭据一小时有效，只能下载本次命中的附件。`--cache-only` 可禁止本次网络补取。
+
+0.6.0 支持 `--attachment-kind all|any|image|file`，保留原附件下标，下载时使用 `matched_attachment_indices`。查询返回 `chat-task-messages/v1`；离线清点返回 `chat-task-materials/v1`。材料整理只使用当前凭据和已验证下载，缺失不会自动补取；每次最多200文件、100 MiB，生成相对路径附件及来源／缺失清单。详情见[材料与范围契约](qq-wechat-task-materials/references/materials.md)。
 
 ## 屏蔽规则
 
@@ -111,12 +117,15 @@ Set-Location ..
 | `bridge_status` | 读取本程序配置状态，不读聊天 |
 | `search_messages` | 在已允许别名下按日期、关键词与用途查询 |
 | `download_attachment` | 按查询凭据保存指定附件，重新检查过滤 |
+| `task_materials` | 离线清点已下载材料；明确 `write_bundle=true` 才生成本地材料文件夹，不读客户端或联网 |
 
 新群登记和解除屏蔽是独立本地操作入口，不作为 MCP 管理工具开放。仅支持 MCP 的模型需要操作端先按用户授权完成新群登记。
 
 ## 范围与数据处理
 
 程序只读当前账号的进程和数据库，密钥在请求内存使用，不作为输出或持久密钥缓存。临时数据库快照随请求清理；数据库为多群共用容器，快照可能包含其他群的数据页，SQL 只查询目标群。QQ 大库需要相应临时磁盘空间；“小源码包”不意味着聊天数据库也小。
+
+同一配置的读取与整理串行；读取子进程先降 CPU／磁盘优先级，应用失败则拒绝，不修改 QQ／微信的优先级。不操作客户端窗口、焦点或剪贴板，不重登、重启或注入；仍有 CPU／磁盘 I/O，不能承诺零资源开销。优先使用本次已保存材料，忙时不自动重试。0.6.0 没有新增依赖、常驻同步或全文索引。
 
 `state_dir` 保存命中消息凭据和审计，`output_dir` 保存主动保存的材料；它们都是私人数据。应用内过滤不隔离宿主 Agent 自身拥有的操作系统权限。不会保证恢复过期／删除附件，也不承诺所有后续客户端版本兼容。版本或模块不符时拒绝，应先实测适配；QQ 私聊及特殊群文件未验证。完整说明见[程序 README](chat-task-bridge/README.md)。
 
@@ -128,7 +137,7 @@ Set-Location chat-task-bridge
 ./.venv/Scripts/python.exe smoke_mcp.py
 ```
 
-68 项测试使用合成数据；CI 不登录真实客户端、不读真实聊天。[实机摘要](docs/VALIDATION.md)区分真实下载与自动化验证，原始聊天和私人配置不公开。
+95 项测试使用合成数据；CI 不登录真实客户端、不读真实聊天。[验证摘要](docs/VALIDATION.md)区分此前真实通道验证与本轮离线增强验证，原始聊天和私人配置不公开。借鉴来源与取舍见[整合说明](docs/INTEGRATION.md)。
 
 ## 许可证与来源
 

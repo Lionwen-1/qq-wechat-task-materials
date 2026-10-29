@@ -1,4 +1,4 @@
 interface:
   display_name: "QQ微信按需取材"
-  short_description: "按指定群名和任务读取消息、下载文件与图片，保留群聊屏蔽规则"
-  default_prompt: "使用 $qq-wechat-task-materials 查指定群的任务消息，并下载所需文件和原图。"
+  short_description: "按群名和任务查消息、下载文件原图并整理材料，保留按需读取与屏蔽规则"
+  default_prompt: "使用 $qq-wechat-task-materials 查指定群的任务消息，下载所需文件和原图，并按需整理带来源的材料。"

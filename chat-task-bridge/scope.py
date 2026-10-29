@@ -101,7 +101,7 @@ class Scope:
         return {"rules_changed": changed, "blocked_rules": self.bridge.config["blocked"], "messages_read": False,
                 "note": "旧的未带平台全局屏蔽条目不自动移除；如仍命中需明确处理对应规则"}
 
-    def search(self, platform, target, purpose, start=None, end=None, keyword="", scan_limit=200, result_limit=50):
+    def search(self, platform, target, purpose, start=None, end=None, keyword="", scan_limit=200, result_limit=50, attachment_kind="all"):
         if not str(purpose).strip():
             raise BridgeError("查询必须提供本次用户任务用途")
         selected = self.locate(platform, target)
@@ -110,8 +110,8 @@ class Scope:
         today = datetime.now(TZ).date()
         end = end or today.isoformat()
         start = start or (date.fromisoformat(end) - timedelta(days=6)).isoformat()
-        result = self.bridge.search(selected["alias"], start, end, keyword, purpose, scan_limit, result_limit)
-        result["scope"] = {"chat_alias": selected["alias"], "start_date": start, "end_date": end, "timezone": "Asia/Shanghai"}
+        result = self.bridge.search(selected["alias"], start, end, keyword, purpose, scan_limit, result_limit, attachment_kind)
+        result.setdefault("scope", {"chat_alias": selected["alias"], "start_date": start, "end_date": end, "timezone": "Asia/Shanghai"})
         return result
 
 
@@ -133,6 +133,7 @@ def main():
             item.add_argument("--keyword", default="")
             item.add_argument("--scan-limit", type=int, default=200)
             item.add_argument("--result-limit", type=int, default=50)
+            item.add_argument("--attachment-kind", choices=["all", "any", "image", "file"], default="all")
     args = parser.parse_args()
     try:
         bridge = Bridge(args.config)
@@ -148,7 +149,7 @@ def main():
         elif args.command in {"block", "unblock"}:
             result = scope.change_block(args.platform, args.chat, args.command == "block", args.purpose)
         else:
-            result = scope.search(args.platform, args.chat, args.purpose, args.start, args.end, args.keyword, args.scan_limit, args.result_limit)
+            result = scope.search(args.platform, args.chat, args.purpose, args.start, args.end, args.keyword, args.scan_limit, args.result_limit, args.attachment_kind)
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=False))
         return 0
     except (BridgeError, OSError, ValueError) as exc:

@@ -15,7 +15,7 @@ def main():
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", default=os.environ.get("CHAT_TASK_BRIDGE_RUNTIME", str(SKILL / "runtime.local.json")))
-    parser.add_argument("command", choices=["status", "rules", "resolve", "allow", "block", "unblock", "search", "fetch", "mcp"])
+    parser.add_argument("command", choices=["status", "rules", "resolve", "allow", "block", "unblock", "search", "fetch", "materials", "mcp"])
     args, remaining = parser.parse_known_args()
     try:
         runtime = Path(args.runtime)
@@ -37,8 +37,8 @@ def main():
                 raise ValueError("本机账号／会话配置尚未建立，请先完成程序绑定")
         if args.command == "mcp":
             command = [str(interpreter), str(root / "mcp_server.py"), "--config", str(config)] + remaining
-        elif args.command == "fetch":
-            command = [str(interpreter), str(root / "bridge.py"), "--config", str(config), "fetch"] + remaining
+        elif args.command in {"fetch", "materials"}:
+            command = [str(interpreter), str(root / "bridge.py"), "--config", str(config), args.command] + remaining
         else:
             command = [str(interpreter), str(root / "scope.py"), "--config", str(config), args.command] + remaining
         return subprocess.run(command, env={**os.environ, "PYTHONIOENCODING": "utf-8"}).returncode

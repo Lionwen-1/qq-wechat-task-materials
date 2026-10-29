@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — 2026-10-30
+
+- Shared CLI / MCP query contract (`chat-task-messages/v1`) with explicit scope, returned bounds and conservative coverage.
+- Attachment-only filters keep original indices and constrain fetches to those selected indices.
+- Offline `task_materials` inventory and optional portable Markdown / JSON bundles from verified existing downloads, capped at 200 files / 100 MiB per call; missing items never trigger a fetch.
+- Block and account changes revoke queries, downloads and material preparation before completion. New receipts bind the source identity; legacy receipts require a fresh query.
+- One shared nonblocking request lock and verified reader-only CPU / disk priority limits; no client-window or process-state operations. No new dependencies or persistent database index.
+- 95 synthetic tests, including copy integrity, revocation, path escapes, literal chat rendering, budgets and worker startup. No new real-chat reads during this integration.
+
 ## 0.5.1 — 2026-10-30
 
 First public GitHub release. Added bilingual repository documentation, explicit MIT licensing for original work, third-party notices, private-data exclusions and Windows CI. Source bundles now include license and ignore files. Fixed QQ database identity checks comparing resolved source paths with unresolved Windows short paths / directory aliases; different databases remain rejected. 68 synthetic tests.

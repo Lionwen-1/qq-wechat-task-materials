@@ -235,14 +235,6 @@ def main():
     request = json.load(sys.stdin)
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            # Apply scheduling hints only to this disposable bridge worker.
-            import psutil
-            try:
-                current_worker = psutil.Process()
-                current_worker.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
-                current_worker.ionice(psutil.IOPRIO_LOW)
-            except (psutil.Error, AttributeError, OSError):
-                pass
             info = identity(request["settings"])
             parser = module("msg_parser")
             with contextlib.closing(open_db(request["settings"], info, Path(request["scratch"]))) as conn:
