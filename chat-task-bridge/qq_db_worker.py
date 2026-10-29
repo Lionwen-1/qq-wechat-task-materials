@@ -28,10 +28,15 @@ def module(name):
 def identity(settings):
     import psutil
     import win32api
-    expected_exe = os.path.normcase(os.path.abspath(settings.get("executable", "")))
+    def canonical(path):
+        # Resolve short (8.3) paths and directory aliases on both sides. The
+        # bound source already uses Path.resolve(); abspath alone is asymmetric.
+        return os.path.normcase(str(Path(path).resolve()))
+
+    expected_exe = canonical(settings.get("executable", ""))
     candidates = [p for p in psutil.process_iter(["name", "cmdline"]) if p.info["name"] == "QQ.exe"
                   and not any("--type" in a for a in p.info["cmdline"] or [])
-                  and os.path.normcase(p.exe()) == expected_exe]
+                  and canonical(p.exe()) == expected_exe]
     if len(candidates) != 1:
         raise BridgeError("当前个人 QQ 主进程未唯一确定")
     raw = win32api.GetFileVersionInfo(expected_exe, "\\")
@@ -45,14 +50,14 @@ def identity(settings):
         raise BridgeError("QQ 数据库路径未绑定本人账号")
     process = candidates[0]
     paths = [p.path for p in process.memory_maps() if "nt_db" in p.path.lower()]
-    mapped = {os.path.normcase(os.path.abspath(p[:-4] if p.endswith(("-shm", "-wal")) else p)) for p in paths}
-    if os.path.normcase(str(source)) not in mapped:
+    mapped = {canonical(p[:-4] if p.endswith(("-shm", "-wal")) else p) for p in paths}
+    if canonical(source) not in mapped:
         try:
             paths = [p.path for p in process.open_files() if "nt_db" in p.path.lower()]
         except psutil.AccessDenied:
             raise BridgeError("无法从 QQ 当前映射或句柄核验绑定数据库") from None
-        mapped.update(os.path.normcase(os.path.abspath(p[:-4] if p.endswith(("-shm", "-wal")) else p)) for p in paths)
-    if os.path.normcase(str(source)) not in mapped:
+        mapped.update(canonical(p[:-4] if p.endswith(("-shm", "-wal")) else p) for p in paths)
+    if canonical(source) not in mapped:
         raise BridgeError("绑定数据库不是当前 QQ 打开的数据库")
     return {"pid": process.pid, "process_start": process.create_time(), "source": str(source), "version": version}
 

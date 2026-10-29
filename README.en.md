@@ -102,7 +102,7 @@ Set-Location chat-task-bridge
 ./.venv/Scripts/python.exe smoke_mcp.py
 ```
 
-The 66 automated tests use synthetic data. CI does not log into clients or read real chats. See the [validation summary](docs/VALIDATION.md) for the separate real-client checks.
+The 68 automated tests use synthetic data. CI does not log into clients or read real chats. See the [validation summary](docs/VALIDATION.md) for the separate real-client checks.
 
 ## License
 

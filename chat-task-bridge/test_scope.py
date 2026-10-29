@@ -1,6 +1,7 @@
 """Named-group requests preserve explicit task scope and existing block rules."""
 from pathlib import Path
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
@@ -119,6 +120,47 @@ class ScopeTests(unittest.TestCase):
         with patch("psutil.process_iter", return_value=[proc]), patch("win32api.GetFileVersionInfo", return_value=version):
             self.assertEqual(identity(settings)["pid"], 123)
         proc.open_files.assert_not_called()
+
+    def test_database_directory_alias_matches_the_same_bound_file(self):
+        real = Path(self.temp.name) / "real"
+        real.mkdir()
+        alias = Path(self.temp.name) / "alias"
+        result = subprocess.run(["cmd", "/d", "/c", "mklink", "/J", str(alias), str(real)],
+                                capture_output=True)
+        self.assertEqual(result.returncode, 0)
+        source = real / "42/nt_qq/nt_db/nt_msg.db"
+        source.parent.mkdir(parents=True)
+        source.touch()
+        mapped = alias / "42/nt_qq/nt_db/nt_msg.db-shm"
+        proc = MagicMock()
+        proc.info = {"name": "QQ.exe", "cmdline": ["QQ.exe"]}
+        proc.pid = 123
+        executable = str(real / "QQ.exe")
+        proc.exe.return_value = executable
+        proc.memory_maps.return_value = [type("Mapping", (), {"path": str(mapped)})()]
+        proc.open_files.side_effect = PermissionError("unrelated deleted NTFS file")
+        proc.create_time.return_value = 1
+        settings = {"executable": executable, "account": "42", "db_path": str(source), "client_version": "9.9.35.52892"}
+        version = {"FileVersionMS": 9 * 65536 + 9, "FileVersionLS": 35 * 65536 + 52892}
+        with patch("psutil.process_iter", return_value=[proc]), patch("win32api.GetFileVersionInfo", return_value=version):
+            self.assertEqual(identity(settings)["source"], str(source.resolve()))
+        proc.open_files.assert_not_called()
+
+    def test_canonical_paths_still_reject_another_database(self):
+        proc = MagicMock()
+        proc.info = {"name": "QQ.exe", "cmdline": ["QQ.exe"]}
+        proc.pid = 123
+        executable = str(Path(self.temp.name) / "QQ.exe")
+        source = str(Path(self.temp.name) / "bound/42/nt_qq/nt_db/nt_msg.db")
+        other = str(Path(self.temp.name) / "other/42/nt_qq/nt_db/nt_msg.db-shm")
+        proc.exe.return_value = executable
+        proc.memory_maps.return_value = [type("Mapping", (), {"path": other})()]
+        proc.open_files.return_value = []
+        settings = {"executable": executable, "account": "42", "db_path": source, "client_version": "9.9.35.52892"}
+        version = {"FileVersionMS": 9 * 65536 + 9, "FileVersionLS": 35 * 65536 + 52892}
+        with patch("psutil.process_iter", return_value=[proc]), patch("win32api.GetFileVersionInfo", return_value=version):
+            with self.assertRaises(BridgeError):
+                identity(settings)
 
     def test_unbound_group_can_be_blocked_without_open_client(self):
         with patch.object(self.bridge, "worker") as worker:

@@ -4,7 +4,7 @@ Public summary, 2026-10-30. Raw chat records, group identifiers, source messages
 
 ## Automated checks
 
-66 tests use synthetic data and temporary fixtures: default deny, block precedence, old-receipt revocation, exact group scope, ambiguous names, dates, account checks, temporary cleanup, source digests, media redaction, QQ fixed-command / response validation, and committed-WAL handling.
+68 tests use synthetic data and temporary fixtures: default deny, block precedence, old-receipt revocation, exact group scope, ambiguous names, dates, account checks, temporary cleanup, source digests, media redaction, QQ fixed-command / response validation, and committed-WAL handling. Windows directory aliases are resolved consistently with the bound database path; a different database is still rejected.
 
 The official MCP SDK completes a real local stdio handshake, discovers exactly three tools and rejects an unapproved alias. The installed skill launcher is separately checked with isolated Unicode JSON, block / unblock operations and MCP transport. These checks do not log into clients or read real chats.
 
