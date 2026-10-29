@@ -14,12 +14,12 @@
 - 查历史和查今后的新消息使用同一入口：需要时重新查询，不在后台追踪。
 - 文件和图片优先从本机已有缓存提取，保存 SHA256、消息来源和版本信息。启用 `active_download` 后，只在调用下载工具且指定版本缺失时取回该附件；查询本身不触发下载。不能承诺恢复已过期文件。可选 NapCat API 仍保留，直接读取不需要它。
 - 图片默认取本地原图或接收版，不自动用缩略图替代。显式指定 `thumbnail` 才取预览；`best_available` 允许降级但返回实际版本。
-- 95 项自动化测试和官方 MCP 实际连接通过；不能把这些结果扩大为所有客户端版本均兼容。
+- 96 项自动化测试和官方 MCP 实际连接通过；不能把这些结果扩大为所有客户端版本均兼容。
 
 | 未缓存附件 | 当前能力 | 实机结果 |
 |---|---|---|
-| 微信原图 | 支持 CDN 主动取回 | 本地仅 6,784 字节缩略图，取回 2,895,047 字节、3213×5712 原图，消息 MD5 一致 |
-| 微信文件 | 支持标准 CDN 文件描述 | 取回本地没有的 8,395,592 字节文件，大小和消息 MD5 一致 |
+| 微信原图 | 支持 CDN 主动取回 | 本地仅 6,784 字节缩略图，取回 2,896,047 字节、3213×5712 原图，消息 MD5 一致 |
+| 微信文件 | 支持标准 CDN 文件描述 | 取回本地没有的 8,396,592 字节文件，大小和消息 MD5 一致 |
 | QQ 图片 | 支持当前消息中的 NT 图片 CDN 描述 | 取回本地没有的 105,057 字节、864×1920 图片，消息 MD5 一致 |
 | QQ 群文件 | 支持后台申请下载地址后通过 HTTPS 取回 | 本地缓存未命中，取回 82,832 字节 ZIP，大小和消息 MD5 一致；正式 MCP 调用通过 |
 
@@ -161,10 +161,10 @@ QQ 本机消息库较大，本次验证约 2.55 GB，所以一次请求需要相
 只复用并固定以下项目的读取模块，没有运行它们的一键安装器、全聊天导出、GUI、监听或发送入口：
 
 - [wechatauto-replica](https://github.com/fanyuantaier/wechatauto-replica)：微信只读密钥识别、页解密、消息解析和本地图片读取；Apache-2.0。
-- [qq-nt-export](https://github.com/q957506633/qq-nt-export)：QQ 只读凭据识别与 Protobuf 消息解析；MIT。
+- [qq-nt-export](https://github.com/q967506633/qq-nt-export)：QQ 只读凭据识别与 Protobuf 消息解析；MIT。
 - [wechat-digest](https://github.com/rmqg/wechat-digest/blob/b2a728bddf3c48dad47f92bb9beeb1fbcc4631fd/deployment/fetch-originals.py)：CDN 取回的字段协议与范围校验参考，已适配 Windows 和文件下载；MIT。
 - [lagrange-python](https://github.com/LagrangeDev/lagrange-python/blob/572d711c5cd23e45c02c5052d4ec0833a3392cf7/lagrange/utils/crypto/tea.py)：仅动态加载独立 QQ-TEA 源码，完整保留 LGPL-2.1 许可证；不导入其客户端或登录流程。源文件可直接替换、修改。
-- QQ 群文件与会话格式参考 [NapCatQQ](https://github.com/NapNeko/NapCatQQ/blob/49ecfe0f56c1e0649db6988444950216fd5fe792/packages/napcat-core/packet/transformer/highway/DownloadGroupFile.ts)、[QQShark](https://github.com/weq-devs/QQShark/blob/6bffb74cb7d6efd9d5d1dece7bc0878079a7f5d6/src/scan.rs) 和 [qq_guid_tool](https://github.com/weq-devs/qq_guid_tool/blob/bdd398228662a41eb3d967dc96ae16160b935bad/windows/README.md) 的公开协议／布局资料；本程序自己实现受限读取和下载包装。
+- QQ 群文件与会话格式参考 [NapCatQQ](https://github.com/NapNeko/NapCatQQ/blob/49ecfe0f56c1e0649db6988444960216fd5fe792/packages/napcat-core/packet/transformer/highway/DownloadGroupFile.ts)、[QQShark](https://github.com/weq-devs/QQShark/blob/6bffb74cb7d6efd9d5d1dece7bc0878079a7f5d6/src/scan.rs) 和 [qq_guid_tool](https://github.com/weq-devs/qq_guid_tool/blob/bdd398228662a41eb3d967dc96ae16160b935bad/windows/README.md) 的公开协议／布局资料；本程序自己实现受限读取和下载包装。
 
 微信主动取回已验证 4.1.15.56、4.2.0.9 的实际协议参数和下载；QQ 图片和群文件依赖当前进程保留有效凭据。过期附件、特殊大文件、其他媒体格式和后续客户端版本可能拒绝，程序会明确报错。
 

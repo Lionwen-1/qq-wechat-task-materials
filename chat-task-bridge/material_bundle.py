@@ -8,7 +8,7 @@ import re
 import secrets
 import tempfile
 
-from bridge import BridgeError, load_json, write_json
+from bridge import BridgeError, attachment_key, load_json, write_json
 
 MAX_FILES = 200
 
@@ -89,7 +89,9 @@ def prepare(bridge, receipt_id, message_ids=None, write_bundle=False):
     for row in rows:
         for index, attachment in enumerate(row.get("attachments", [])):
             if index in row.get("matched_attachment_indices", list(range(len(row.get("attachments", []))))):
-                key = hashlib.sha256((row["id"] + str(index)).encode()).hexdigest()[:16]
+                key = attachment_key(row["id"], index)
+                if key in wanted:
+                    raise BridgeError("附件标识冲突，未省略或覆盖材料")
                 wanted[key] = (row, index, attachment)
     if len(wanted) > 500:
         raise BridgeError("材料超过本次500项上限，请限定消息后再整理")

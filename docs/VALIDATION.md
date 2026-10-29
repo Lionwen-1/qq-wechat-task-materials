@@ -4,7 +4,7 @@ Public summary, 2026-10-30. Raw chat records, group identifiers, source messages
 
 ## Automated checks
 
-95 tests use synthetic data and temporary fixtures: default deny, block precedence, old-receipt revocation, exact group scope, ambiguous names, dates, account checks, temporary cleanup, source digests, media redaction, QQ fixed-command / response validation, and committed-WAL handling. Windows directory aliases are resolved consistently with the bound database path; a different database is still rejected.
+96 tests use synthetic data and temporary fixtures: default deny, block precedence, old-receipt revocation, exact group scope, ambiguous names, dates, account checks, temporary cleanup, source digests, media redaction, QQ fixed-command / response validation, and committed-WAL handling. Windows directory aliases are resolved consistently with the bound database path; a different database is still rejected.
 
 The official MCP SDK completes a real local stdio handshake, discovers exactly four tools and rejects an unapproved alias. The installed skill launcher is separately checked with isolated Unicode JSON, block / unblock operations, offline material preparation and MCP transport. These checks do not log into clients or read real chats.
 
@@ -18,8 +18,8 @@ In the validated environment, requests were scoped to two explicitly authorized 
 | --- | ---: | --- |
 | QQ standard group file | 82,832 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
 | QQ image | 105,057 | Source MD5 matched; decoded image 864×1920 |
-| WeChat original image | 2,895,047 | Source size / MD5 matched; decoded image 3213×5712 |
-| WeChat file | 8,395,592 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
+| WeChat original image | 2,896,047 | Source size / MD5 matched; decoded image 3213×5712 |
+| WeChat file | 8,396,592 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
 
 QQ and WeChat process IDs / start times and the local configuration remained unchanged during revalidation. Request-temporary directories were empty afterward. No Narrator, window automation, injection or client restart was used. Downloaded files were not executed.
 

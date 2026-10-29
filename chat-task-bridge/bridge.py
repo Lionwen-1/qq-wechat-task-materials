@@ -58,6 +58,11 @@ def binding_digest(config, platform):
     return hashlib.sha256(json.dumps(values, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def attachment_key(message_id, index):
+    pair = json.dumps([str(message_id), index], ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(pair.encode()).hexdigest()[:16]
+
+
 def write_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -416,7 +421,7 @@ class Bridge:
             raise BridgeError("附件不在本次附件类型筛选结果中")
         row = matches[0]
         attachment = row["attachments"][attachment_index]
-        target = self.output / receipt_id / (hashlib.sha256((message_id + str(attachment_index)).encode()).hexdigest()[:16] + "-" + secrets.token_hex(4))
+        target = self.output / receipt_id / (attachment_key(message_id, attachment_index) + "-" + secrets.token_hex(4))
         target.mkdir(parents=True)
         file_target = target / "files"
         file_target.mkdir()

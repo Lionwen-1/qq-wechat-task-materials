@@ -7,7 +7,7 @@
 - Offline `task_materials` inventory and optional portable Markdown / JSON bundles from verified existing downloads, capped at 200 files / 100 MiB per call; missing items never trigger a fetch.
 - Block and account changes revoke queries, downloads and material preparation before completion. New receipts bind the source identity; legacy receipts require a fresh query.
 - One shared nonblocking request lock and verified reader-only CPU / disk priority limits; no client-window or process-state operations. No new dependencies or persistent database index.
-- 95 synthetic tests, including copy integrity, revocation, path escapes, literal chat rendering, budgets and worker startup. No new real-chat reads during this integration.
+- 96 synthetic tests, including copy integrity, revocation, path escapes, literal chat rendering, budgets and worker startup. No new real-chat reads during this integration.
 
 ## 0.5.1 — 2026-10-30
 

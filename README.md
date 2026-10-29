@@ -137,7 +137,7 @@ Set-Location chat-task-bridge
 ./.venv/Scripts/python.exe smoke_mcp.py
 ```
 
-95 项测试使用合成数据；CI 不登录真实客户端、不读真实聊天。[验证摘要](docs/VALIDATION.md)区分此前真实通道验证与本轮离线增强验证，原始聊天和私人配置不公开。借鉴来源与取舍见[整合说明](docs/INTEGRATION.md)。
+96 项测试使用合成数据；CI 不登录真实客户端、不读真实聊天。[验证摘要](docs/VALIDATION.md)区分此前真实通道验证与本轮离线增强验证，原始聊天和私人配置不公开。借鉴来源与取舍见[整合说明](docs/INTEGRATION.md)。
 
 ## 许可证与来源
 

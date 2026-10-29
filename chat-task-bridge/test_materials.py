@@ -278,6 +278,13 @@ class MaterialsTests(unittest.TestCase):
         self.assertFalse(matches_saved_file(path, {"bytes": 7, "sha256": "0" * 64}))
         self.assertEqual(stream.sizes, [8])
 
+    def test_ambiguous_message_id_index_concatenations_keep_both_attachments(self):
+        # ('m1', 10) and ('m11', 0) must not share the key 'm110'.
+        self.rows = [dict(self.rows[0], id="m1", attachments=[{"kind": "file"}] * 11),
+                     dict(self.rows[1], id="m11", attachments=[{"kind": "file"}])]
+        result = self.search()
+        self.assertEqual(self.bridge.materials(result["receipt_id"])["coverage"]["attachments"], 12)
+
 
 if __name__ == "__main__":
     unittest.main()
