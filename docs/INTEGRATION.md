@@ -8,10 +8,14 @@
 | [WeFlow CLI MCP contract](https://github.com/zhuobichen/weflow-cli/blob/master/docs/MCP.md) | Explicit bounded message scope and coverage |
 | [im-mcp](https://github.com/stkoecn/im-mcp) | Fetch only materials relevant to the requested task |
 
-0.7.0 removes the offline inventory / portable-bundle layer and the unused NapCat HTTP route. Search, downloads and group blocking remain in the tool; interpretation, summaries, organization and deliverables belong to the host model. The three MCP tools share the CLI implementation. No background sync, whole-account index, persistent key cache or AI backend is added.
+0.7.0 removes the offline inventory / portable-bundle layer and the unused NapCat HTTP route. Search, downloads and group blocking remain in the tool; interpretation, summaries, organization and deliverables belong to the host model. The MCP tools share the CLI implementation. No background sync, whole-account index, persistent key cache or AI backend is added.
 
 保留低优先级、串行读取及账号／版本／来源校验。不操作QQ／微信窗口、焦点、剪贴板、登录状态或客户端优先级。仍有数据库读取开销；复用有效查询和已下载文件，忙时不自动重试。
 
 Original vendor licenses and pinned sources remain in [third-party notices](../THIRD_PARTY_NOTICES.md). Current parameters and integration are in the [CLI / MCP reference](../qq-wechat-task-materials/references/cli-and-mcp.md).
 
 0.8.0 keeps that scope while adding standard-library TLS connection reuse and Windows privacy controls via the existing pywin32 dependency. No new package, daemon, full-account index or AI backend is introduced; Pillow and the Python runtime are upgraded for security.
+
+## Merged records (0.9.0)
+
+Use read_merged_record(receipt_id, message_id, fetch_if_missing=true), or bridge.py read-record --receipt ... --message .... Reuse WeChat merged_record.state=inline bodies already in search results; QQ preview_only requires a per-record read. QQ keyword search covers previews, not remote bodies. Check complete and limitations, including missing bodies, unsupported/nested remote messages and size/item/depth limits. complete describes the parsed message list, not media/OCR contents. Internal media are placeholders without download handles; normal message attachment downloads are unchanged. Forwarded identities are self-reported. No arbitrary resource IDs/URLs, original-group lookup, or automatic recursive network calls.

@@ -22,18 +22,14 @@ from datetime import date, datetime, timedelta
 from bridge import BridgeError, ROOT, TZ, sha256_file
 from wechat_identity import inspect_identity
 from privacy import verify_image
+from merged_records import wechat_record, render, xml
 
 VENDOR = ROOT / "vendor/wechatauto_readonly"
 
 
 def card_xml(text):
     """Group messages can prefix XML with the sender's username and a newline."""
-    from xml.etree import ElementTree as ET
-    body = re.sub(r"^[A-Za-z0-9_@.-]+:\r?\n", "", text, count=1)
-    try:
-        return ET.fromstring(body)
-    except ET.ParseError:
-        return None
+    return xml(text)
 
 
 def public_content(local_type, text):
@@ -232,6 +228,7 @@ def scoped_history(db, user, request):
         local_type = int(raw["local_type"]) & 0xFFFFFFFF
         kind = {3: "image", 34: "record", 43: "video", 49: "file"}.get(local_type)
         text = public_content(local_type, str(row["content"]))
+        record = wechat_record(str(row["content"])) if local_type == 49 else None
         if local_type == 49:
             element = card_xml(text)
             if element is not None:
@@ -242,14 +239,50 @@ def scoped_history(db, user, request):
                     kind = None
             else:
                 kind = None
+                text = "[卡片正文无法解析]"
+        if record is not None:
+            text = render(record)
         result.append({"id": row["shard"] + ":" + str(row["local_id"]), "time": row["create_time"],
                        "text": text, "sender": row["sender_username"] or "unknown", "kind": row["type"],
                        "attachments": [{"kind": kind}] if kind else [],
                        "_db_user": user, "_db_shard": row["shard"], "_db_local_id": row["local_id"],
-                       "_db_type": local_type, "_db_raw_type": int(raw["local_type"]), "_db_sort_seq": row["sort_seq"]})
+                       "_db_type": local_type, "_db_raw_type": int(raw["local_type"]), "_db_sort_seq": row["sort_seq"],
+                       "_db_content_sha256": record_digest(raw["message_content"], raw["compress_content"])})
+        if record is not None:
+            result[-1].update(kind="forward", merged_record={"available": True, "state": "inline", **record})
     return {"rows": result, "coverage": {"source": "wechat_db_readonly", "date_filter": "selected_chat_sql",
             "upstream_exhausted": len(rows) < limit, "process_write": False, "key_persistence": False,
             "snapshot_lifetime": "request_only", "source_shards": len(db._message_dbs())}}
+
+
+def record_digest(content, compressed):
+    digest = hashlib.sha256()
+    for value in (content, compressed):
+        body = value if isinstance(value, bytes) else str(value).encode()
+        digest.update(len(body).to_bytes(8, "big") + body)
+    return digest.hexdigest()
+
+
+def read_record(db, user, request):
+    expected = request["row"]
+    if expected.get("_db_user") != user:
+        raise BridgeError("微信目标会话已变化，请重新查询")
+    raw = db.get_message_row(user, int(expected["_db_local_id"]), local_type=expected["_db_raw_type"], shard=expected["_db_shard"])
+    if not raw or str(raw["sort_seq"]) != str(expected["_db_sort_seq"]):
+        raise BridgeError("原始微信消息未通过分片与序列校验")
+    if record_digest(raw["content"], raw.get("compress_content")) != expected.get("_db_content_sha256"):
+        raise BridgeError("微信原消息内容已变化，请重新查询")
+    mtype = db._msg_type_name(raw["local_type"])
+    text = db._friendly_content(raw["content"], mtype) if isinstance(raw["content"], bytes) else str(raw["content"] or "")
+    if not text.strip() or text == "[" + str(mtype) + "]":
+        compressed = raw.get("compress_content")
+        if isinstance(compressed, bytes) and compressed:
+            text = db._friendly_content(compressed, mtype)
+    result = wechat_record(text)
+    if result is None:
+        raise BridgeError("指定微信消息不是合并聊天记录")
+    result["source"] = "wechat_inline_record"
+    return result
 
 
 def fetch_attachment(db, media, user, request):
@@ -429,6 +462,8 @@ def main():
                 result = scoped_history(db, user, request)
             elif request["operation"] == "fetch":
                 result = fetch_attachment(db, media, user, request)
+            elif request["operation"] == "read_record":
+                result = read_record(db, user, request)
             else:
                 raise BridgeError("只读数据库适配不支持此操作")
             db._keys.clear()

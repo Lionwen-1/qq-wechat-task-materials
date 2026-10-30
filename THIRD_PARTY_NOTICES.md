@@ -16,3 +16,5 @@ Detailed file attribution: [`vendor/NOTICE.md`](chat-task-bridge/vendor/NOTICE.m
 Pinned Python dependencies are installed separately and retain their own distribution licenses. QQ, WeChat and their names / marks belong to their respective owners; this is an independent project.
 
 The optional Python bootstrap downloads a SHA256-pinned [Astral standalone CPython build](https://github.com/astral-sh/python-build-standalone/releases/tag/20261026). Python/PSF and bundled component license files remain in that installed distribution; interpreter binaries are not included in the project source ZIP.
+
+Merged-record QQ wire field references: [Lagrange longmsg](https://github.com/LagrangeDev/lagrange-python/blob/572d711c5cd23e45c02c5052d4ec0833a3392cf7/lagrange/pb/message/longmsg.py), message heads and rich-text structures at the same pinned commit. The bounded forward reader is independently implemented; no additional upstream runtime or source code is bundled. Existing QQ-TEA licensing remains unchanged.

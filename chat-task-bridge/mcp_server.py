@@ -52,5 +52,18 @@ def download_attachment(receipt_id: str, message_id: str, attachment_index: int 
     return run(bridge.fetch, receipt_id, message_id, attachment_index, image_tier, fetch_if_missing)
 
 
+@server.tool()
+def read_merged_record(receipt_id: str, message_id: str, fetch_if_missing: bool = True) -> dict:
+    """Expand one merged record found by search_messages. Rechecks scope and source.
+
+    WeChat inline bodies are also included in search results. QQ search only has
+    previews; this call retrieves one source-bound body if active retrieval is enabled.
+    fetch_if_missing=false forbids network retrieval. Check complete/limitations:
+    nested remote records are not followed; media are placeholders, not download handles.
+    Forwarded senders are as reported, not verified identities. No arbitrary resource IDs.
+    """
+    return run(bridge.read_record, receipt_id, message_id, fetch_if_missing)
+
+
 if __name__ == "__main__":
     server.run(transport="stdio")

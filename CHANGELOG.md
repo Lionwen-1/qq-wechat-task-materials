@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 — 2026-10-30
+
+- Read merged chat records through Skill / CLI / MCP. QQ recognizes modern JSON and legacy XML cards and retrieves only the requested source-bound body; WeChat expands inline recorditem and nested recordxml text.
+- Preserve exclusions, receipt expiration and account/source checks before and after expansion. No new dependencies or background service.
+- Add bounded XML/gzip parsing, partial-result markers and credential-free media placeholders. Forwarded identities are reported, not verified; embedded media downloads and remote nested expansion remain unsupported.
+- 123 synthetic tests, MCP/installed launcher checks and a real QQ record verified. WeChat parsing is fixture-tested; a live merged-record sample is still pending. Reconnect only the bridge MCP service to discover the fourth tool.
+
 ## 0.8.0 — 2026-10-30
 
 - Secure WeChat active retrieval with verified TLS, no HTTP fallback, per-download connection reuse and bounded 256 KiB ranges. Revalidate the same original/file samples.

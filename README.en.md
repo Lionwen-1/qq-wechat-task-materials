@@ -6,8 +6,9 @@
 
 - Find historical and recent messages in QQ and WeChat groups.
 - Search task materials by group, date and keyword.
+- Read merged chat records.
 - Download chat attachments, group files and original images.
-- Manage blocked groups.
+- Exclude unwanted groups from searches.
 - Use the Skill, CLI or MCP with different models.
 
 For example:

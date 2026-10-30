@@ -71,10 +71,14 @@ def crypto():
 def build_request(account, group, file_id, material, guid, appid, version, sequence, tea):
     download = encode([(1, int(group)), (2, 7), (3, 102), (4, file_id.encode())])
     body = encode([(1, 0x6d6), (2, 2), (4, encode([(3, download)])), (12, 1)])
+    return build_sso_request(account, body, COMMAND, material, guid, appid, version, sequence, tea)
+
+
+def build_sso_request(account, body, command, material, guid, appid, version, sequence, tea):
     trace = ("00-" + secrets.token_hex(16) + "-" + secrets.token_hex(8) + "-01").encode()
     reserved = encode([(15, trace), (16, material["uid"].encode())])
     head = (struct.pack(">III", sequence, appid, 2052) + bytes.fromhex("020000000000000000000000") +
-            sized(material["a2"]) + sized(COMMAND) + sized(b"") + sized(guid.hex().encode()) +
+            sized(material["a2"]) + sized(command) + sized(b"") + sized(guid.hex().encode()) +
             sized(b"") + sized(version.encode(), 2) + sized(reserved))
     ciphertext = tea.qqtea_encrypt(sized(head) + sized(body), material["key"])
     return sized(struct.pack(">I", 12) + b"\x01" + sized(material["d2"]) + b"\0" + sized(account.encode()) + ciphertext)
@@ -92,7 +96,7 @@ def receive(sock, length):
     return bytes(result)
 
 
-def parse_reply(frame, account, sequence, key, tea):
+def decode_sso_reply(frame, account, sequence, key, tea, command):
     if len(frame) > MAX_FRAME or len(frame) < 10:
         raise BridgeError("QQ 文件响应大小无效")
     stream = io.BytesIO(frame)
@@ -114,7 +118,7 @@ def parse_reply(frame, account, sequence, key, tea):
     take_sized(stream)  # Server wording must not enter logs or tool output.
     if code:
         raise BridgeError("QQ 文件请求认证返回 " + str(code))
-    if take_sized(stream) != COMMAND:
+    if take_sized(stream) != command:
         raise BridgeError("QQ 响应不是本次群文件下载命令")
     take_sized(stream)  # session ID
     raw = stream.read(4)
@@ -146,7 +150,11 @@ def parse_reply(frame, account, sequence, key, tea):
         data = data[4:]
     elif compression != 0:
         raise BridgeError("QQ 文件响应压缩格式尚未支持")
-    envelope = protobuf(data)
+    return data
+
+
+def parse_reply(frame, account, sequence, key, tea):
+    envelope = protobuf(decode_sso_reply(frame, account, sequence, key, tea, COMMAND))
     if one(envelope, 1, 0) != 0x6d6 or one(envelope, 2, 0) != 2:
         raise BridgeError("QQ 文件响应业务标识不符")
     code = one(envelope, 3, 0, 0)

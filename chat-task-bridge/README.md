@@ -1,6 +1,6 @@
-# 聊天取材桥 0.8.0
+# 聊天取材桥 0.9.0
 
-按任务读取个人QQ／微信指定群消息、下载文件和图片、保留群聊屏蔽。JSON CLI和MCP共用同一实现；理解、总结、整理和成品制作由上层模型完成。
+按任务读取个人QQ／微信指定群消息和合并聊天记录、下载文件和图片、保留群聊屏蔽。JSON CLI和MCP共用同一实现；理解、总结、整理和成品制作由上层模型完成。
 
 ## 安装一次
 
@@ -36,7 +36,7 @@ search默认最近7个北京时间自然日，可给start/end；单次最多32�
 
 配套 `qq-wechat-task-materials` Skill可让本地Agent按群名和任务调用CLI；目录相邻时直接复用程序.venv，分开时用私人runtime.local.json映射。没有本机执行器或MCP连接的网页模型无法访问客户端。
 
-运行 `mcp_server.py --config <本机配置路径>` 提供stdio服务，三个工具：bridge_status、search_messages、download_attachment。MCP不提供新群登记或解禁；由本地操作端按用户授权完成。模型只按需要查看状态，复用当前有效查询和已下载文件。
+运行 `mcp_server.py --config <本机配置路径>` 提供stdio服务，四个工具：bridge_status、search_messages、download_attachment、read_merged_record。MCP不提供新群登记或解禁；由本地操作端按用户授权完成。模型只按需要查看状态，复用当前有效查询和已下载文件。
 
 ## 客户端保护与资源
 
@@ -63,4 +63,12 @@ search默认最近7个北京时间自然日，可给start/end；单次最多32�
 ./.venv/Scripts/python.exe smoke_mcp.py
 ```
 
-99项合成测试，不读取真实聊天。原创代码MIT；vendor保留Apache-2.0、MIT、LGPL-2.1原许可证。固定来源见upstream-versions.json，固定依赖见requirements-lock-windows-py313.txt。
+123项合成测试，不读取真实聊天。原创代码MIT；vendor保留Apache-2.0、MIT、LGPL-2.1原许可证。固定来源见upstream-versions.json，固定依赖见requirements-lock-windows-py313.txt。
+
+## 合并记录读取（0.9.0）
+
+search识别QQ旧XML／新JSON合并转发卡片，返回preview_only摘要；微信type=19解析内嵌recorditem正文（包括内嵌recordxml）。按需 `bridge.py read-record --receipt <凭据> --message <消息ID>`，MCP对应read_merged_record。微信正文已在查询结果时直接复用，无需再读；QQ按原消息绑定标识单条取回，不自动展开扫描范围内所有卡片。QQ网络取回沿用已绑定客户端会话与active_download开关，cache_only在快照前拒绝；不登录、不发送聊天、不触碰客户端界面或进程状态。
+
+返回chat-task-merged-record/v1；转发人/时间按原包声明，署名不作身份认证。原消息哈希、凭据有效期、账号绑定、群聊排除在读取及返回时校验。QQ预览关键词查询不覆盖远端正文；微信关键词覆盖已解析内嵌文本。最多200条、128Ki字符、4层微信内嵌记录，QQ正文解压最多512KiB；缺失/超限/未知/嵌套远端记录明确partial，不跟随外链或遍历原始来源群。媒体占位不代表读取其内容，合并记录内部附件暂不支持下载；普通聊天附件下载不变。
+
+XML禁止DTD/实体和超大输入，QQ响应核对会话、序列、固定只读命令及来源resid；正文不暴露传输凭据。无新增依赖、索引或后台服务。QQ实机已展开原授权群的一条真实记录；微信本轮无合并样本，解析/嵌套/压缩回退通过合成验证，尚待指定真实样本验收。

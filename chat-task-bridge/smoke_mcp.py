@@ -17,7 +17,7 @@ async def main():
             tools = await session.list_tools()
             status = (await session.call_tool("bridge_status", {})).model_dump(by_alias=True, mode="json")
             denial = (await session.call_tool("search_messages", {"chat_alias": "excluded-group", "start_date": "2026-10-01", "end_date": "2026-10-29", "keyword": "", "purpose": "scope regression test"})).model_dump(by_alias=True, mode="json")
-            assert [x.name for x in tools.tools] == ["bridge_status", "search_messages", "download_attachment"]
+            assert [x.name for x in tools.tools] == ["bridge_status", "search_messages", "download_attachment", "read_merged_record"]
             assert "会话未在允许名单" in json.dumps(denial, ensure_ascii=False)
             print(json.dumps({"ok": True, "protocol": hello.get("protocolVersion"), "tools": [x.name for x in tools.tools], "excluded_scope_rejected": True}, ensure_ascii=False))
 

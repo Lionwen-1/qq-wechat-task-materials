@@ -14,6 +14,7 @@ import time
 from datetime import date, datetime, timedelta
 
 from bridge import BridgeError, ROOT, TZ
+from merged_records import qq_card
 
 VENDOR = ROOT / "vendor/qqnt_readonly"
 
@@ -168,9 +169,24 @@ def parse_row(row, parser):
         converted = parser.segment_of(segment)
         if converted.get("type") in {"image", "file", "video"}:
             attachments.append({"kind": converted["type"], "name": segment.get("filename") or "", "bytes": segment.get("filesize"), "_segment": i})
-    return {"id": str(row["msg_id"]), "time": row["ts"], "sender": row["card"] or row["nick"] or row["sender_qq"] or row["sender_uid"] or "unknown",
+    result = {"id": str(row["msg_id"]), "time": row["ts"], "sender": row["card"] or row["nick"] or row["sender_qq"] or row["sender_uid"] or "unknown",
             "text": parser.content_preview(content), "kind": (content or {}).get("type", "unknown"), "attachments": attachments,
             "_qq_blob_sha256": hashlib.sha256(row["blob"] or b"").hexdigest(), "_qq_segments": segments}
+    card = qq_card(segments)
+    if card:
+        result.update(kind="forward", text="[合并聊天记录] " + card["title"] + "\n" + card["preview"],
+                      merged_record={"available": True, "state": "preview_only", "complete": False})
+    return result
+
+
+def read_record(row, request, info):
+    if row["_qq_blob_sha256"] != request["row"].get("_qq_blob_sha256"):
+        raise BridgeError("QQ 原消息内容已变化，请重新查询")
+    card = qq_card(row["_qq_segments"])
+    if not card:
+        raise BridgeError("指定 QQ 消息不是可展开的合并聊天记录")
+    from qq_forward import fetch_record
+    return fetch_record(card, request, info, module("key_scan"))
 
 
 def fetch(row, request):
@@ -242,11 +258,12 @@ def main():
                     result = {"rows": rows, "coverage": {"source": "qqnt_db_readonly", "date_filter": "selected_group_sql",
                               "process_write": False, "key_persistence": False, "plaintext_db_persistence": False,
                               "snapshot_lifetime": "request_only", "upstream_exhausted": len(rows) < request["scan_limit"]}}
-                elif request["operation"] == "fetch":
+                elif request["operation"] in {"fetch", "read_record"}:
                     rows = select_rows(conn, request, request["row"]["id"])
                     if len(rows) != 1:
                         raise BridgeError("QQ 原消息未唯一定位")
-                    result = fetch(parse_row(rows[0], parser), request)
+                    row = parse_row(rows[0], parser)
+                    result = read_record(row, request, info) if request["operation"] == "read_record" else fetch(row, request)
                 else:
                     raise BridgeError("QQ 只读适配不支持此操作")
             if identity(request["settings"]) != info:
