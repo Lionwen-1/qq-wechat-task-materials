@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta
 from bridge import BridgeError, ROOT, TZ, sha256_file
 from wechat_identity import inspect_identity
 from privacy import verify_image
-from merged_records import wechat_record, render, xml
+from merged_records import descriptor_digest, wechat_record, render, xml
 
 VENDOR = ROOT / "vendor/wechatauto_readonly"
 
@@ -286,6 +286,8 @@ def read_record(db, user, request):
 
 
 def fetch_attachment(db, media, user, request):
+    if request.get("record_parent"):
+        return fetch_record_attachment(db, user, request)
     expected = request["row"]
     if expected.get("_db_user") != user:
         raise BridgeError("微信目标会话已变化，请重新查询")
@@ -377,6 +379,41 @@ def fetch_attachment(db, media, user, request):
     return {"files": [out], "media_tier": tier, "source_digest_verified": False}
 
 
+def fetch_record_attachment(db, user, request):
+    parent = request["record_parent"]
+    record = read_record(db, user, {**request, "row": parent})
+    expected = request["row"]
+    index = int(expected["_record_entry"])
+    selected = record["messages"][index]["attachments"][int(request["attachment_index"])]
+    original = expected["attachments"][int(request["attachment_index"])]
+    descriptor = selected["_record_descriptor"]
+    if descriptor_digest(descriptor) != original.get("_descriptor_sha256"):
+        raise BridgeError("微信合并附件来源描述已变化，请重新查询展开")
+    kind = selected["kind"]
+    name = selected["name"]
+    # Only an exact message-derived filename, under a known cache, then MD5/size.
+    if name:
+        from record_media import safe_name, save_bytes, source_limits
+        name = safe_name(name)
+        digest, size = source_limits(descriptor, request)
+        root = (Path(db.account_dir) / "msg/file").resolve()
+        candidates = [month / name for month in root.iterdir() if month.is_dir()] if root.is_dir() else []
+        for source in candidates[:120]:
+            source = source.resolve()
+            if not source.is_relative_to(root) or not source.is_file() or source.stat().st_size != size:
+                continue
+            body = source.read_bytes()
+            if hashlib.md5(body).hexdigest() == digest:
+                result = save_bytes(body, {**descriptor, "filename": name}, request, kind, "wechat_record_verified_cache")
+                result["transport"] = "local_cache"
+                return result
+    if not request.get("fetch_if_missing", True) or not request["settings"].get("active_download", False):
+        raise BridgeError("微信合并附件未缓存；主动下载未启用或本次为cache_only")
+    if kind == "image" and request.get("image_tier") == "thumbnail":
+        raise BridgeError("合并记录只提供完整图片下载描述；未冒充缩略图")
+    return download_descriptor(db, request, descriptor.copy(), kind, name, "source_verified")
+
+
 def fetch_cdn(db, raw, request, element, kind, filename=None):
     """Only a fresh, exact message row may supply the network descriptor."""
     if not request.get("fetch_if_missing", True) or not request["settings"].get("active_download", False):
@@ -410,6 +447,12 @@ def fetch_cdn(db, raw, request, element, kind, filename=None):
                       "fileid": attrs.get("cdnbigimgurl" if original else "cdnmidimgurl", ""),
                       "key": attrs.get("aeskey", "")}
         result_tier = "original" if original else "mid"
+    return download_descriptor(db, request, descriptor, kind, filename, result_tier)
+
+
+def download_descriptor(db, request, descriptor, kind, filename, result_tier):
+    from wechat_cdn import account_route, download
+    maximum = int(request.get("maximum_bytes", 100 * 1024 * 1024))
     if (not re.fullmatch(r"[a-fA-F0-9]{32}", descriptor["md5"])
             or not re.fullmatch(r"[a-fA-F0-9]{32}", descriptor["key"])
             or not 0 < descriptor["size"] <= maximum or not 0 < len(descriptor["fileid"]) <= 8192):
@@ -439,8 +482,8 @@ def fetch_cdn(db, raw, request, element, kind, filename=None):
             raise BridgeError("CDN 图片格式尚未支持")
         filename = descriptor["md5"] + extensions[fmt]
         transfer["dimensions"] = list(dimensions)
-    if not filename or Path(filename).name != filename or any(c in filename for c in '\\/:*?"<>|\x00'):
-        raise BridgeError("附件文件名无效")
+    from record_media import safe_name
+    filename = safe_name(filename)
     out = Path(request["target"]) / filename
     with out.open("xb") as stream:
         stream.write(plain)

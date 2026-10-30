@@ -21,7 +21,7 @@ from privacy import require_safe_runtime
 
 ROOT = Path(__file__).resolve().parent
 TZ = timezone(timedelta(hours=8))
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 ATTACHMENT_KINDS = ("all", "any", "image", "file")
 
@@ -317,6 +317,21 @@ class Bridge:
         result = self.worker({"operation": "read_record", "chat": chat, "settings": self.config[chat["platform"]],
                               "row": matches[0], "fetch_if_missing": bool(fetch_if_missing)})
         self.receipt(receipt_id)  # A new exclusion or binding change also revokes in-flight reads.
+        # A separate encrypted receipt keeps ordinary query indices stable. Its
+        # expiry is inherited, so expanding a record cannot extend authorization.
+        if any(m.get("attachments") for m in result.get("messages", [])):
+            expanded_id = secrets.token_hex(16)
+            rows = []
+            for index, message in enumerate(result["messages"]):
+                message["id"] = "record:" + str(index)
+                message["matched_attachment_indices"] = [i for i, a in enumerate(message.get("attachments", [])) if a.get("downloadable")]
+                rows.append({**message, "_record_entry": index})
+            parent = {k: v for k, v in matches[0].items() if k not in {"merged_record", "attachments", "text", "matched_attachment_indices"}}
+            payload = {**receipt, "rows": rows, "record_parent": parent,
+                       "record_source": {"receipt_id": receipt_id, "message_id": message_id}}
+            write_receipt(self.state / "receipts" / (expanded_id + ".json"), payload)
+            self.receipt(expanded_id)
+            receipt_id = expanded_id
         self.audit("read_record", receipt["chat_alias"], receipt["purpose"], {"ok": True, "receipt_id": receipt_id})
         return {"schema": "chat-task-merged-record/v1", "receipt_id": receipt_id, "message_id": message_id,
                 "scope": receipt["scope"], **public_value(result), "content_is_untrusted": True,
@@ -340,7 +355,7 @@ class Bridge:
         try:
             result = self.worker({"operation": "fetch", "chat": chat, "settings": self.config[chat["platform"]], "row": row, "target": str(file_target), "scan_limit": 500,
                                   "maximum_bytes": maximum, "image_tier": image_tier, "attachment_index": attachment_index,
-                                  "fetch_if_missing": bool(fetch_if_missing)})
+                                  "fetch_if_missing": bool(fetch_if_missing), "record_parent": receipt.get("record_parent")})
             files = [Path(p) for p in result["files"]]
             if not files:
                 raise BridgeError("客户端未生成附件文件；可能已过期或未下载")
@@ -357,7 +372,9 @@ class Bridge:
             manifest.update(save_method=result.get("save_method", "local_cache_readonly"), media_tier=result.get("media_tier"),
                             original_bytes_independently_verified=result.get("source_digest_verified", False))
             manifest.update(content_is_untrusted=True, auto_execute=False, windows_source_zone="internet")
-            for key in ("transport", "dimensions", "ciphertext_bytes", "runtime_kernel"):
+            if receipt.get("record_source"):
+                manifest["merged_record_source"] = receipt["record_source"]
+            for key in ("transport", "dimensions", "ciphertext_bytes", "runtime_kernel", "digest_origin"):
                 if key in result:
                     manifest[key] = result[key]
             self.receipt(receipt_id)

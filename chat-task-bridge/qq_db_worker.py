@@ -197,6 +197,12 @@ def fetch(row, request):
     index = int(request.get("attachment_index", 0))
     attachment = row["attachments"][index]
     segment = segments[attachment["_segment"]]
+    return fetch_segment(segment, attachment, request)
+
+
+def fetch_segment(segment, attachment, request):
+    if segment.get("transport") == "qq_record_group_file" and not segment.get("md5_hex"):
+        return fetch_record_group_file(segment, request)
     account_root = Path(request["settings"]["db_path"]).resolve().parents[2]
     allowed = [account_root] + [Path(p).resolve() for p in request["settings"].get("media_roots", [])]
     candidates = []
@@ -238,12 +244,31 @@ def fetch(row, request):
         shutil.copyfile(p, out)
         return {"files": [str(out)], "media_tier": "source_verified", "source_digest_verified": True}
     if attachment["kind"] == "image":
-        from qq_cdn import fetch_image
+        from qq_cdn import fetch_image, image_url
+        if segment.get("transport") == "qq_record_image":
+            from record_media import fetch_qq_legacy_image
+            try:
+                return fetch_qq_legacy_image(segment, request)
+            except BridgeError:
+                image_url(segment)  # Only the fixed supported modern route may follow.
         return fetch_image(segment, request, identity(request["settings"])["pid"], module("key_scan"))
     if attachment["kind"] == "file":
+        if segment.get("transport") == "qq_record_private_file":
+            from record_media import fetch_qq_private_file
+            return fetch_qq_private_file(segment, request, identity(request["settings"]), module("key_scan"))
         from qq_group_file import fetch_group_file
+        if segment.get("transport") == "qq_record_group_file":
+            return fetch_record_group_file(segment, request)
         return fetch_group_file(segment, request, identity(request["settings"]), module("key_scan"))
     raise BridgeError("QQ 此附件类型尚不支持后台取回")
+
+
+def fetch_record_group_file(segment, request):
+    if segment.get("bus_id") != 102 or not str(segment.get("group_id", "")).isdigit() or int(segment["group_id"]) <= 0:
+        raise BridgeError("合并记录的群文件类型尚未支持主动取回")
+    from qq_group_file import fetch_group_file
+    scoped = {**request, "chat": {**request["chat"], "id": str(segment["group_id"])}}
+    return fetch_group_file(segment, scoped, identity(request["settings"]), module("key_scan"))
 
 
 def main():
@@ -259,11 +284,20 @@ def main():
                               "process_write": False, "key_persistence": False, "plaintext_db_persistence": False,
                               "snapshot_lifetime": "request_only", "upstream_exhausted": len(rows) < request["scan_limit"]}}
                 elif request["operation"] in {"fetch", "read_record"}:
-                    rows = select_rows(conn, request, request["row"]["id"])
+                    parent = request.get("record_parent") or request["row"]
+                    rows = select_rows(conn, request, parent["id"])
                     if len(rows) != 1:
                         raise BridgeError("QQ 原消息未唯一定位")
                     row = parse_row(rows[0], parser)
-                    result = read_record(row, request, info) if request["operation"] == "read_record" else fetch(row, request)
+                    if request["operation"] == "read_record":
+                        result = read_record(row, request, info)
+                    elif request.get("record_parent"):
+                        if row["_qq_blob_sha256"] != parent.get("_qq_blob_sha256") or not qq_card(row["_qq_segments"]):
+                            raise BridgeError("合并记录原消息已变化，请重新查询展开")
+                        attachment = request["row"]["attachments"][int(request["attachment_index"])]
+                        result = fetch_segment(attachment["_record_descriptor"], attachment, request)
+                    else:
+                        result = fetch(row, request)
                 else:
                     raise BridgeError("QQ 只读适配不支持此操作")
             if identity(request["settings"]) != info:

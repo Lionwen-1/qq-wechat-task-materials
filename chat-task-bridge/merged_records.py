@@ -1,5 +1,6 @@
 """Bounded, credential-free views of merged records. No client or network access."""
 import json
+import hashlib
 import re
 from xml.etree import ElementTree as ET
 
@@ -7,6 +8,7 @@ MAX_XML = 2 * 1024**2
 MAX_ITEMS = 200
 MAX_TEXT = 128 * 1024
 MAX_DEPTH = 4
+MAX_ATTACHMENTS = 200
 
 
 def xml(text):
@@ -41,6 +43,30 @@ def append(result, sender, stamp, kind, text, depth=0):
     result["messages"].append({"sender": str(sender or "unknown")[:200], "time": str(stamp or "")[:100],
                                "kind": kind, "text": text[:remaining], "depth": depth})
     return True
+
+
+def descriptor_digest(descriptor):
+    return hashlib.sha256(json.dumps(descriptor, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def attach(result, message, kind, name, size, descriptor):
+    count = sum(len(m.get("attachments", [])) for m in result["messages"])
+    if count >= MAX_ATTACHMENTS:
+        limit(result, "attachment_limit")
+        return
+    digest = descriptor.get("md5_hex") or descriptor.get("md5") or ""
+    source_file = (descriptor.get("transport") == "qq_record_group_file" and not digest
+                   and descriptor.get("bus_id") == 102 and int(descriptor.get("group_id") or 0) > 0
+                   and bool(re.fullmatch(r"/?[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", str(descriptor.get("file_uuid") or ""))))
+    ready = (isinstance(size, int) and 0 < size <= 500 * 1024**2
+             and isinstance(digest, str) and (bool(re.fullmatch(r"[a-fA-F0-9]{32}", digest)) or source_file))
+    item = {"kind": kind, "name": str(name or "")[:200], "bytes": size,
+            "downloadable": ready, "_record_descriptor": descriptor,
+            "_descriptor_sha256": descriptor_digest(descriptor)}
+    if not ready:
+        item["unavailable_reason"] = "source_descriptor_incomplete"
+    message.setdefault("attachments", []).append(item)
+    result["attachments_downloadable"] = result["attachments_downloadable"] or ready
 
 
 def render(result):
@@ -93,6 +119,14 @@ def wechat_record(text):
                 content = "[" + label + "] " + (item.findtext("datatitle") or "")
             if not append(result, sender, stamp, kind, content, depth):
                 break
+            if kind in {"image", "file"}:
+                size_text = item.findtext("datasize") or ""
+                descriptor = {"transport": "wechat_record", "filetype": 1 if kind == "image" else 5,
+                              "size": int(size_text) if size_text.isdigit() and len(size_text) < 12 else 0,
+                              "md5": item.findtext("fullmd5") or "", "fileid": item.findtext("cdndataurl") or "",
+                              "key": item.findtext("cdndatakey") or ""}
+                attach(result, result["messages"][-1], kind, item.findtext("datatitle") or item.findtext("title") or "",
+                       descriptor["size"], descriptor)
             if kind == "unsupported":
                 limit(result, "unsupported_message_type")
             if kind == "forward":

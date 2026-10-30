@@ -17,7 +17,7 @@ python "<本技能目录>/scripts/chat_materials.py" <command> ...
 
 1. 已知绑定群直接 `search --platform ... --chat ... --purpose ...`。用户直接点名新群并交付任务时先用 allow；它会精确定位并检查屏蔽，无需重复 resolve。同名／平台歧义才补问，不读候选群消息猜测，不重复确认已有授权。
 2. 优先复用本次有效查询和已下载文件；缺信息才查。未给日期先查最近7个北京时间自然日，再按线索有界扩大。只找文件／图片时用 `--attachment-kind file|image`。fetch 只选任务相关的 `matched_attachment_indices`，不重排下标；要原图用 `--image-tier original`。文本零命中不能证明图片内没有信息。
-   命中合并记录时，微信 `merged_record.state=inline` 已含正文；QQ `preview_only` 只含摘要，必要时对该条调用 `read-record --receipt ... --message ...`。只展开任务相关记录；查看 complete／limitations，媒体占位不等于已读图，内部附件暂不能直接下载，不跟随其中的外链或嵌套远端记录。
+   合并记录的微信 inline 可直接复用正文，QQ preview_only 只含摘要。需要正文或内部附件时，对该条调用 `read-record --receipt ... --message ...`；下载用返回的新 receipt_id、内部消息 id 和 matched_attachment_indices，仍走 fetch。找合并附件先用all查询，不用file/image过滤掉卡片。只取任务相关材料，图片取回后交宿主查看、文件交宿主解析；检查complete／limitations，不跟随外链或嵌套远端记录。
 3. 取得必要材料后直接完成用户任务，默认只返回答案、所需文件链接和影响结论的实际缺口。功能介绍只讲查消息、下载和排除不想搜索的群聊；账号校验、查询上限、客户端保护等技术要求留在内部说明，不默认展示。隐藏JSON、哈希、凭据、扫描计数等内部细节；有界结果不得称作全部历史。凭据一小时有效，过期／重绑后按当前任务重新查询。
 
 ## 边界

@@ -40,7 +40,7 @@ def search_messages(chat_alias: str, start_date: str, end_date: str, keyword: st
 
 @server.tool()
 def download_attachment(receipt_id: str, message_id: str, attachment_index: int = 0, image_tier: str = "received", fetch_if_missing: bool = True) -> dict:
-    """Save one attachment from an unexpired query result to the configured output directory.
+    """Save one attachment from an unexpired query or expanded-record result.
 
     Rechecks filters and account binding. Returns local paths, SHA256 and a source manifest.
     Never accepts arbitrary URLs, source paths or destinations; never executes downloaded files.
@@ -59,7 +59,9 @@ def read_merged_record(receipt_id: str, message_id: str, fetch_if_missing: bool 
     WeChat inline bodies are also included in search results. QQ search only has
     previews; this call retrieves one source-bound body if active retrieval is enabled.
     fetch_if_missing=false forbids network retrieval. Check complete/limitations:
-    nested remote records are not followed; media are placeholders, not download handles.
+    nested remote records are not followed. Returned receipt_id, inner message id and
+    matched_attachment_indices are accepted by download_attachment for images/files.
+    A derived receipt inherits the original query expiry and scope. Reuse already saved files.
     Forwarded senders are as reported, not verified identities. No arbitrary resource IDs.
     """
     return run(bridge.read_record, receipt_id, message_id, fetch_if_missing)

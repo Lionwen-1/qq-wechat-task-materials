@@ -19,3 +19,5 @@ Client updates fail closed when bindings differ. Revalidate the same account, ex
 0.8.0 uses Pillow 13.0.0 and a Windows/Python 3.13 hash-locked dependency file. The same four previously authorized samples passed on Python 3.13.18; WeChat file/original retrieval used verified HTTPS, with no plaintext fallback. Newer interpreter branches require separate validation.
 
 0.9.0: QQ merged-record retrieval passed a real-record check on the same bound kernel. WeChat inline/nested merged-record parsing passed synthetic fixtures; no live merged-record sample was available in the authorized test group. Merged media are placeholders; embedded attachment downloads and remote nested-record expansion are not yet supported.
+
+0.10.0 (2026-10-31): QQ merged-record images and group-file copies passed live retrieval on the same kernel. Image bytes and Excel/Word samples were verified and parsed. WeChat inline file/image adapters and private-origin QQ file adapters are fixture-tested; live samples remain pending. Voice/video and remote nested records are outside the added media scope.

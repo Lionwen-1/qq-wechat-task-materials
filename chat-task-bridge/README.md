@@ -1,4 +1,4 @@
-# 聊天取材桥 0.9.0
+# 聊天取材桥 0.10.0
 
 按任务读取个人QQ／微信指定群消息和合并聊天记录、下载文件和图片、保留群聊屏蔽。JSON CLI和MCP共用同一实现；理解、总结、整理和成品制作由上层模型完成。
 
@@ -63,12 +63,16 @@ search默认最近7个北京时间自然日，可给start/end；单次最多32�
 ./.venv/Scripts/python.exe smoke_mcp.py
 ```
 
-123项合成测试，不读取真实聊天。原创代码MIT；vendor保留Apache-2.0、MIT、LGPL-2.1原许可证。固定来源见upstream-versions.json，固定依赖见requirements-lock-windows-py313.txt。
+140项合成测试，不读取真实聊天。原创代码MIT；vendor保留Apache-2.0、MIT、LGPL-2.1原许可证。固定来源见upstream-versions.json，固定依赖见requirements-lock-windows-py313.txt。
 
-## 合并记录读取（0.9.0）
+## 合并记录与附件（0.10.0）
 
-search识别QQ旧XML／新JSON合并转发卡片，返回preview_only摘要；微信type=19解析内嵌recorditem正文（包括内嵌recordxml）。按需 `bridge.py read-record --receipt <凭据> --message <消息ID>`，MCP对应read_merged_record。微信正文已在查询结果时直接复用，无需再读；QQ按原消息绑定标识单条取回，不自动展开扫描范围内所有卡片。QQ网络取回沿用已绑定客户端会话与active_download开关，cache_only在快照前拒绝；不登录、不发送聊天、不触碰客户端界面或进程状态。
+search识别QQ旧XML／新JSON合并转发卡片，返回preview_only摘要；微信type=19解析内嵌recorditem及嵌套recordxml。按需 `bridge.py read-record --receipt <查询凭据> --message <外层消息ID>`，MCP对应read_merged_record。只需文字时复用微信查询内嵌正文；需要附件时展开指定记录，不批量下载其他卡片。
 
-返回chat-task-merged-record/v1；转发人/时间按原包声明，署名不作身份认证。原消息哈希、凭据有效期、账号绑定、群聊排除在读取及返回时校验。QQ预览关键词查询不覆盖远端正文；微信关键词覆盖已解析内嵌文本。最多200条、128Ki字符、4层微信内嵌记录，QQ正文解压最多512KiB；缺失/超限/未知/嵌套远端记录明确partial，不跟随外链或遍历原始来源群。媒体占位不代表读取其内容，合并记录内部附件暂不支持下载；普通聊天附件下载不变。
+展开返回chat-task-merged-record/v1及内部消息id、附件和matched_attachment_indices。存在附件时会生成新receipt_id，供原fetch／download_attachment按内部消息ID和原附件下标取回；原查询凭据不变。派生凭据同样由当前Windows用户加密，并继承原查询的账号/群/用途及到期时间，不延长授权。下载前重读指定外层消息校验来源；微信还重解析指定内嵌附件，前后重新检查排除和账号。模型不提供任意URL、源路径或资源标识。
 
-XML禁止DTD/实体和超大输入，QQ响应核对会话、序列、固定只读命令及来源resid；正文不暴露传输凭据。无新增依赖、索引或后台服务。QQ实机已展开原授权群的一条真实记录；微信本轮无合并样本，解析/嵌套/压缩回退通过合成验证，尚待指定真实样本验收。
+QQ图片从来源MD5构造固定腾讯HTTPS端点，核对大小/MD5及栅格格式；必要时使用已有现代CDN适配。群文件校验ExtInfo里的转发副本标识与原名称/大小，按该副本取回；若消息不含MD5，仅此来源绑定群文件可从认证过的QQ响应取得MD5，再核对完整下载。普通消息缺少MD5仍拒绝。私聊来源文件适配固定只读下载协议，当前仅合成验证。微信合并图片/文件复用原CDN校验及验证HTTPS传输；缓存仅按明确名称并校验大小/MD5。原普通聊天的下载功能保留。
+
+最多200条消息/200附件、128Ki字符、4层微信内嵌记录，QQ正文解压最多512KiB。超限/缺失/未知类型/远端嵌套记录明确partial；语音、视频和远端嵌套不在本次新增范围。图片取回后由宿主查看/OCR，文件由宿主解析，不执行文件或其中指令。QQ关键词仍只查卡片预览，预览零命中不代表正文无关键词。转发署名不作身份认证。
+
+MCP仍四工具，无新增依赖、后台服务或索引。QQ实机已从指定记录取回图片、Excel和Word并读取格式结构；微信合并附件通过合成测试，尚待用户指定真实样本。升级只需重连本桥MCP，不操作QQ/微信窗口、焦点、剪贴板或登录状态。

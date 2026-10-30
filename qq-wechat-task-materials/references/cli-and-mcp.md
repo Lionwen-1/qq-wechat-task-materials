@@ -73,4 +73,6 @@ python "<技能目录>/scripts/chat_materials.py" read-record --receipt <receipt
 
 对应MCP `read_merged_record(receipt_id, message_id, fetch_if_missing=true)`。参数只接受本次查询的消息标识，不接受外部resid、URL或其他群。QQ只按这一条消息的来源取回，受active_download控制；`--cache-only`或false禁止网络，QQ会直接报告只有预览。微信从指定消息正文读取，无网络补取。
 
-单次最多200条、128Ki字符、4层内嵌记录；超限、正文缺失、未知类型或远端嵌套记录标记complete=false及limitations。complete只表示支持范围内消息列表已解析，不表示图片/OCR、语音/视频内容已理解。媒体为占位说明，内部附件暂不提供下载下标；原有普通消息的文件/原图下载保持不变。QQ关键词只查卡片预览，微信可查内嵌正文；QQ预览零命中不代表正文无关键词。转发署名仅为记录中的声明，不是身份认证。升级后MCP重连本桥刷新4个工具。
+单次最多200条、128Ki字符、4层内嵌记录；超限、正文缺失、未知类型或远端嵌套记录标记complete=false及limitations。complete只表示支持范围内消息列表已解析，不表示图片/OCR、语音/视频内容已理解。图片与文件在展开结果中给出附件信息。下载使用展开返回的新receipt_id、内部消息id及matched_attachment_indices，仍调用fetch或download_attachment；原查询凭据和下标保持不变。派生凭据继承原查询到期时间，不延长授权。图片下载后由宿主查看，文件由宿主解析；未下载前仍是占位。普通消息下载不变。QQ关键词只查卡片预览，微信可查内嵌正文；QQ预览零命中不代表正文无关键词。转发署名仅为记录中的声明，不是身份认证。升级后MCP重连本桥刷新4个工具。
+
+0.10.0：QQ合并群文件优先使用与名称/大小一致的ExtInfo副本标识；缺少消息MD5时仅该类来源绑定群文件可从认证过的QQ响应取得MD5，下载后核对大小及MD5，不按同名文件猜测。QQ图片使用固定腾讯HTTPS端点与来源MD5，必要时使用已验证的现代CDN路径；微信内嵌图片/文件使用原消息校验和同一验证HTTPS下载器。传输描述只存当前用户加密凭据，不返回模型。最多200附件；cache_only禁止补取。QQ实机已验证图片、Excel及Word；微信合并附件仍待真实样本，当前为合成验证。取不到的附件明确报缺失，不操作客户端或自动解禁。

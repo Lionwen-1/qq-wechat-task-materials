@@ -1,10 +1,12 @@
 """Retrieve one source-bound QQ merged record. No login or generic packet API."""
 import secrets
+import base64
+import json
 import socket
 import zlib
 
 from bridge import BridgeError
-from merged_records import append, limit, view
+from merged_records import append, attach, limit, view
 from qq_group_file import (build_sso_request, crypto, decode_sso_reply, encode,
                            public_addresses, receive)
 from qq_session import check_kernel, device_and_app, read_material
@@ -16,6 +18,78 @@ MAX_BODY = 512 * 1024
 
 def text(fields, field, default=""):
     return one(fields, field, 2, default.encode()).decode("utf-8", errors="replace")
+
+
+def image_descriptors(elem):
+    for field in (4, 8):
+        for n, w, value in elem:
+            if n != field or w != 2:
+                continue
+            image = protobuf(value)
+            yield {"transport": "qq_record_image", "filename": text(image, 1 if field == 4 else 2),
+                   "filesize": one(image, 2 if field == 4 else 25, 0, 0),
+                   "md5_hex": one(image, 7 if field == 4 else 13, 2, b"").hex()}
+    for n, w, value in elem:
+        if n != 53 or w != 2:
+            continue
+        common = protobuf(value)
+        if one(common, 1, 0, 0) != 48 or one(common, 3, 0, 0) not in {10, 20}:
+            continue
+        # MsgInfo / MsgInfoBody / IndexNode / FileInfo. No URLs are followed here.
+        info = protobuf(one(common, 2, 2, b""))
+        for n, w, value in info:
+            if n != 1 or w != 2:
+                continue
+            body = protobuf(value)
+            index = protobuf(one(body, 1, 2))
+            file = protobuf(one(index, 1, 2))
+            descriptor = {"transport": "qq_record_image", "filename": text(file, 4),
+                          "filesize": one(file, 1, 0, 0), "md5_hex": text(file, 2)}
+            picture = protobuf(one(body, 2, 2, b""))
+            extension = protobuf(one(picture, 2, 2, b""))
+            if text(picture, 3) == "multimedia.nt.qq.com.cn":
+                path, params = text(picture, 1), text(extension, 1).lstrip("?&")
+                descriptor["cdn_url"] = path + (("&" if "?" in path else "?") + params if params else "")
+            yield descriptor
+
+
+def private_file(value):
+    file = protobuf(value)
+    return {"transport": "qq_record_private_file", "filename": text(file, 5),
+            "filesize": one(file, 6, 0, 0), "md5_hex": one(file, 4, 2, b"").hex(),
+            "file_uuid": text(file, 3), "file_hash": text(file, 57)}
+
+
+def group_file(elem, group):
+    for n, w, value in elem:
+        if n != 5 or w != 2:
+            continue
+        trans = protobuf(value)
+        if one(trans, 1, 0, 0) != 24:
+            continue
+        raw = one(trans, 2, 2)
+        if len(raw) < 3 or int.from_bytes(raw[1:3], "big") != len(raw) - 3:
+            raise BridgeError("合并记录群文件描述长度无效")
+        outer = protobuf(raw[3:])
+        file = protobuf(one(protobuf(one(outer, 7, 2)), 2, 2))
+        descriptor = {"transport": "qq_record_group_file", "filename": text(file, 4),
+                      "filesize": one(file, 3, 0, 0), "md5_hex": one(file, 8, 2, b"").hex(),
+                      "file_uuid": text(file, 2), "bus_id": one(file, 1, 0, 0), "group_id": one(group, 1, 0, 0)}
+        # Forwarding may copy a group file and retain its OLD outer UUID/group.
+        # ExtInfo identifies the resulting copy. It must match the visible name
+        # and size; neither the original source group nor arbitrary links are read.
+        extra = text(file, 7)
+        if extra and len(extra) <= 16384:
+            try:
+                encoded = json.loads(extra).get("ExtInfo")
+                inner = protobuf(one(protobuf(base64.b64decode(encoded, validate=True)), 2, 2))
+                if (one(inner, 1, 0, 0) == 3 and one(inner, 3, 0, 0) > 0
+                        and text(inner, 5) == descriptor["filename"] and one(inner, 6, 0, 0) == descriptor["filesize"]
+                        and one(inner, 13, 0, 0) == descriptor["bus_id"]):
+                    descriptor.update(group_id=one(inner, 3, 0), file_uuid=text(inner, 4))
+            except (ValueError, TypeError, AttributeError, BridgeError):
+                pass
+        yield descriptor
 
 
 def parse_payload(data, title):
@@ -38,14 +112,24 @@ def parse_payload(data, title):
         message = protobuf(one(msg, 3, 2, b""))
         rich = protobuf(one(message, 1, 2, b""))
         parts = []
+        attachments = []
         for n, w, value in rich:
             if n != 2 or w != 2:
                 continue
             elem = protobuf(value)
+            try:
+                attachments.extend(("image", descriptor) for descriptor in image_descriptors(elem))
+                files = list(group_file(elem, group))
+            except BridgeError:
+                files = []
+                limit(result, "attachment_descriptor_unsupported")
+            attachments.extend(("file", descriptor) for descriptor in files)
             if any(n == 1 and w == 2 for n, w, _ in elem):
                 parts.append(text(protobuf(one(elem, 1, 2)), 1))
             elif any(n in {3, 4, 8} for n, _, _ in elem):
                 parts.append("[图片]")
+            elif files:
+                parts.extend("[文件] " + descriptor["filename"] for descriptor in files)
             elif any(n == 2 for n, _, _ in elem):
                 parts.append("[表情]")
             elif any(n == 19 for n, _, _ in elem):
@@ -81,13 +165,24 @@ def parse_payload(data, title):
             else:
                 parts.append("[未展开的消息]")
                 limit(result, "unsupported_or_nested_message")
-        if any(n in {3, 4} for n, _, _ in rich) or any(n == 2 for n, _, _ in message):
-            parts.append("[文件或语音]")
+        if any(n == 2 for n, _, _ in message):
+            descriptor = private_file(one(protobuf(one(message, 2, 2)), 1, 2))
+            attachments.append(("file", descriptor))
+            parts.append("[文件] " + descriptor["filename"])
+        for n, w, value in rich:
+            if n == 3 and w == 2:
+                descriptor = private_file(value)
+                attachments.append(("file", descriptor))
+                parts.append("[文件] " + descriptor["filename"])
+            elif n == 4:
+                parts.append("[语音]")
         if not parts:
             parts.append("[未支持的消息]")
             limit(result, "unsupported_message_type")
         if not append(result, sender, stamp, "message", "".join(parts)):
             break
+        for kind, descriptor in attachments:
+            attach(result, result["messages"][-1], kind, descriptor["filename"], descriptor["filesize"], descriptor)
     return result
 
 

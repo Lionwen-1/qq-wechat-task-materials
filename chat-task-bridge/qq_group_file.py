@@ -158,10 +158,14 @@ def parse_reply(frame, account, sequence, key, tea):
     if one(envelope, 1, 0) != 0x6d6 or one(envelope, 2, 0) != 2:
         raise BridgeError("QQ 文件响应业务标识不符")
     code = one(envelope, 3, 0, 0)
+    if code >= 1 << 63:
+        code -= 1 << 64
     if code:
         raise BridgeError("QQ 群文件服务返回 " + str(code))
     result = protobuf(one(protobuf(one(envelope, 4, 2)), 3, 2))
     code = one(result, 1, 0, 0)
+    if code >= 1 << 63:
+        code -= 1 << 64
     if code:
         raise BridgeError("QQ 群文件下载返回 " + str(code) + "；文件可能已删除或过期")
     return result
@@ -193,12 +197,13 @@ def fetch_group_file(segment, request, info, scan):
         raise BridgeError("QQ 群文件未缓存，主动下载未启用或本次为 cache_only")
     file_id = str(segment.get("file_uuid") or "")
     digest = str(segment.get("md5_hex") or "").lower()
+    authenticated_digest = not digest and segment.get("transport") == "qq_record_group_file" and segment.get("bus_id") == 102
     name = str(segment.get("filename") or "")
     size = int(segment.get("filesize") or 0)
     maximum = int(request.get("maximum_bytes", 100 * 1024**2))
     if (chat.get("kind") != "group" or not str(chat.get("id", "")).isdigit()
             or not re.fullmatch(r"/?[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", file_id)
-            or not re.fullmatch(r"[a-f0-9]{32}", digest) or not 0 < size <= maximum):
+            or not (re.fullmatch(r"[a-f0-9]{32}", digest) or authenticated_digest) or not 0 < size <= maximum):
         raise BridgeError("QQ 群文件的会话、文件标识、大小或 MD5 不完整")
     if (not name or len(name) > 200 or name != Path(name).name or name.endswith((".", " "))
             or re.search(r'[\\/:*?"<>|\x00-\x1f]', name)
@@ -219,6 +224,10 @@ def fetch_group_file(segment, request, info, scan):
             sock.sendall(packet)
             length = int.from_bytes(receive(sock, 4), "big")
             result = parse_reply(receive(sock, length - 4), settings["account"], sequence, material["key"], tea)
+        remote_digest = one(result, 9, 2).hex()
+        if not re.fullmatch(r"[a-f0-9]{32}", remote_digest) or digest and remote_digest != digest:
+            raise BridgeError("QQ 文件服务校验值与原始消息不符")
+        digest = remote_digest
         url = endpoint(result, digest)
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         with opener.open(url, timeout=35) as response:
@@ -235,4 +244,4 @@ def fetch_group_file(segment, request, info, scan):
         output.write(body)
     return {"files": [str(destination)], "media_tier": "file", "source_digest_verified": True,
             "save_method": "qq_group_file_sso_download", "transport": "qq_sso_then_https",
-            "runtime_kernel": binding["version"]}
+            "runtime_kernel": binding["version"], "digest_origin": "qq_authenticated_file_metadata" if authenticated_digest else "source_message"}

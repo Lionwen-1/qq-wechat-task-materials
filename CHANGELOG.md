@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0 — 2026-10-31
+
+- Download files and images inside merged chat records through the existing Skill / CLI / MCP download tool. Derived encrypted receipts inherit the original scope and expiry; ordinary query indices remain stable.
+- Resolve QQ forwarded group-file copies using matching ExtInfo metadata. When such a record lacks a message MD5, obtain it from the authenticated file response and verify bytes; ordinary missing-digest messages still fail closed.
+- Read QQ modern/legacy image descriptors, use fixed verified HTTPS routes, and check image size, digest and format. WeChat nested record files/images reuse scoped source checks and the existing verified TLS downloader.
+- 140 synthetic tests plus installed CLI/MCP checks. Real QQ merged images, XLSX and DOCX retrieval/structure checks passed. WeChat merged media and private-origin QQ files await live samples. No new dependency, daemon or MCP tool; clients remain untouched.
+
 ## 0.9.0 — 2026-10-30
 
 - Read merged chat records through Skill / CLI / MCP. QQ recognizes modern JSON and legacy XML cards and retrieves only the requested source-bound body; WeChat expands inline recorditem and nested recordxml text.
