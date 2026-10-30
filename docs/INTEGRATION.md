@@ -13,3 +13,5 @@
 保留低优先级、串行读取及账号／版本／来源校验。不操作QQ／微信窗口、焦点、剪贴板、登录状态或客户端优先级。仍有数据库读取开销；复用有效查询和已下载文件，忙时不自动重试。
 
 Original vendor licenses and pinned sources remain in [third-party notices](../THIRD_PARTY_NOTICES.md). Current parameters and integration are in the [CLI / MCP reference](../qq-wechat-task-materials/references/cli-and-mcp.md).
+
+0.8.0 keeps that scope while adding standard-library TLS connection reuse and Windows privacy controls via the existing pywin32 dependency. No new package, daemon, full-account index or AI backend is introduced; Pillow and the Python runtime are upgraded for security.

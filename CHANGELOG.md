@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 — 2026-10-30
+
+- Secure WeChat active retrieval with verified TLS, no HTTP fallback, per-download connection reuse and bounded 256 KiB ranges. Revalidate the same original/file samples.
+- Protect receipts with current-user Windows DPAPI and private directories; reject/remove legacy plaintext and expired receipts. Clean abandoned snapshots under the state lock. Leave user downloads intact.
+- Restrict tool/runtime/config/data access to the current Windows user, SYSTEM and administrators. Minimize worker environments and audit data; mark saved attachments with their Internet source zone and bound raster image formats/pixels.
+- Upgrade to Python 3.13.18/Pillow 13.0.0 with hash-locked dependencies. Keep the three MCP tools and existing group/account rules; add security regressions (99 tests total).
+- Upgrade: rebuild the bridge environment and reconnect MCP; old receipts need a fresh task query. QQ/WeChat do not need a restart. Host permissions and cloud processing remain the operator's responsibility.
+
+
 ## 0.7.0 — 2026-10-30
 
 - Keep the tool focused on on-demand messages, attachment retrieval and group blocking. Move summaries, organization and deliverables to the host model.

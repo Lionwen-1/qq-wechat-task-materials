@@ -41,7 +41,11 @@ def main():
             command = [str(interpreter), str(root / "bridge.py"), "--config", str(config), args.command] + remaining
         else:
             command = [str(interpreter), str(root / "scope.py"), "--config", str(config), args.command] + remaining
-        return subprocess.run(command, env={**os.environ, "PYTHONIOENCODING": "utf-8"}).returncode
+        names = {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+                 "PROGRAMDATA", "USERNAME", "USERDOMAIN", "HOMEDRIVE", "HOMEPATH"}
+        environment = {k: v for k, v in os.environ.items() if k.upper() in names}
+        environment.update(PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+        return subprocess.run(command, env=environment).returncode
     except (OSError, ValueError, KeyError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         return 1

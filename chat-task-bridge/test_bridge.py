@@ -1,3 +1,4 @@
+from privacy import read_receipt, write_receipt
 from pathlib import Path
 import tempfile
 import unittest
@@ -51,7 +52,7 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn("_segment", result["messages"][0]["attachments"][0])
         self.assertEqual(result["coverage"]["unknown_time_excluded"], 1)
         self.assertFalse(result["coverage"]["history_complete"])
-        stored = load_json(self.bridge.state / "receipts" / (result["receipt_id"] + ".json"))
+        stored = read_receipt(self.bridge.state / "receipts" / (result["receipt_id"] + ".json"))
         self.assertNotIn("_qq_segments", stored["rows"][0])
 
     def test_block_after_search_revokes_download(self):
@@ -74,9 +75,9 @@ class BridgeTests(unittest.TestCase):
     def test_receipt_expiry(self):
         receipt = self.search_fixture()["receipt_id"]
         p = self.bridge.state / "receipts" / (receipt + ".json")
-        obj = load_json(p)
+        obj = read_receipt(p)
         obj["created_at"] -= 3601
-        write_json(p, obj)
+        write_receipt(p, obj)
         with self.assertRaises(BridgeError):
             self.bridge.fetch(receipt, "m1")
 

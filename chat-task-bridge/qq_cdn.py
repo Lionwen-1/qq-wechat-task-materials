@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 
 from bridge import BridgeError, NoRedirect
+from privacy import verify_image
 
 KEY_PATTERN = re.compile(rb'[?&]rkey=([A-Za-z0-9_%-]{50,256})(?![A-Za-z0-9_%-])')
 WIDE_PATTERN = re.compile(rb'r\x00k\x00e\x00y\x00=\x00((?:[A-Za-z0-9_%-]\x00){50,256})(?![A-Za-z0-9_%-]\x00)')
@@ -101,11 +102,8 @@ def fetch_image(segment, request, pid, scan):
             continue
         if len(body) != size or hashlib.md5(body).hexdigest() != digest:
             continue
-        from PIL import Image
         try:
-            with Image.open(io.BytesIO(body)) as image:
-                fmt, dimensions = image.format, image.size
-                image.verify()
+            fmt, dimensions = verify_image(io.BytesIO(body))
         except Exception:
             raise BridgeError("QQ 下载结果未通过图片格式校验") from None
         extension = {"JPEG": ".jpg", "MPO": ".jpg", "PNG": ".png", "GIF": ".gif",

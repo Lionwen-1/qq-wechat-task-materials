@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta
 
 from bridge import BridgeError, ROOT, TZ, sha256_file
 from wechat_identity import inspect_identity
+from privacy import verify_image
 
 VENDOR = ROOT / "vendor/wechatauto_readonly"
 
@@ -336,10 +337,8 @@ def fetch_attachment(db, media, user, request):
     out = md.download_image(user, expected["_db_local_id"], save_dir=str(target), tier=tier, shard=expected["_db_shard"])
     if not out:
         raise BridgeError("微信图片本地保存失败")
-    from PIL import Image
     try:
-        with Image.open(out) as image:
-            image.verify()
+        verify_image(out)
     except Exception:
         raise BridgeError("图片解密结果未通过格式验证") from None
     return {"files": [out], "media_tier": tier, "source_digest_verified": False}
@@ -397,11 +396,8 @@ def fetch_cdn(db, raw, request, element, kind, filename=None):
     plain, transfer = download(route, descriptor, time.monotonic() + 75, maximum,
                                version, b"UnifiedPCWindows")
     if kind == "image":
-        from PIL import Image
         try:
-            with Image.open(io.BytesIO(plain)) as image:
-                fmt, dimensions = image.format, image.size
-                image.verify()
+            fmt, dimensions = verify_image(io.BytesIO(plain))
         except Exception:
             raise BridgeError("CDN 图片未通过格式校验，未保存为可用附件") from None
         extensions = {"JPEG": ".jpg", "MPO": ".jpg", "PNG": ".png", "GIF": ".gif",

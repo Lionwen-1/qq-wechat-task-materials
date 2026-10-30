@@ -15,10 +15,13 @@ import time
 import tempfile
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
+from privacy import (cleanup_receipts, cleanup_scratch, mark_download, private_directory, protect_path,
+                     read_receipt, reject_reparse, worker_environment, write_receipt)
+from privacy import require_safe_runtime
 
 ROOT = Path(__file__).resolve().parent
 TZ = timezone(timedelta(hours=8))
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 ATTACHMENT_KINDS = ("all", "any", "image", "file")
 
@@ -61,8 +64,13 @@ def write_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + "." + secrets.token_hex(6) + ".tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temp, path)
+    try:
+        with temp.open("x", encoding="utf-8") as stream:
+            protect_path(temp)  # Protect the empty file before writing private data.
+            stream.write(json.dumps(value, ensure_ascii=False, indent=2))
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def load_json(path):
@@ -133,9 +141,20 @@ class Bridge:
         self.reload()
 
     def reload(self):
+        if self.path.name != "config.example.json" and self.path.is_file():
+            protect_path(self.path)
         self.config = load_json(self.path)
         self.state = (self.path.parent / self.config.get("state_dir", "state")).resolve()
         self.output = (self.path.parent / self.config.get("output_dir", "downloads")).resolve()
+
+    def prepare_state(self):
+        private_directory(self.state)
+        private_directory(self.output)
+        private_directory(self.state / "receipts")
+        cleanup_receipts(self.state / "receipts")
+        legacy_log = reject_reparse(self.state / "audit.jsonl")
+        if legacy_log.is_file():
+            legacy_log.unlink()  # Old audit entries contain raw chat aliases and task text.
 
     def chat(self, alias):
         self.reload()  # A block change takes effect for old receipts, too.
@@ -170,14 +189,22 @@ class Bridge:
                 "note": "状态仅检查配置，不读取 QQ／微信消息；允许名单不表示已实机验证"}
 
     def audit(self, operation, alias, purpose, result):
-        self.state.mkdir(parents=True, exist_ok=True)
-        with (self.state / "audit.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps({"at": datetime.now(TZ).isoformat(), "operation": operation, "chat": alias, "purpose": purpose, **result}, ensure_ascii=False) + "\n")
+        private_directory(self.state)
+        path = reject_reparse(self.state / "audit-v2.jsonl")
+        if path.is_file() and path.stat().st_size > 1024 * 1024:
+            path.unlink()
+        details = {key: result[key] for key in ("ok", "count", "receipt_id", "messages_read") if key in result}
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"at": datetime.now(TZ).isoformat(), "operation": operation,
+                "scope_hash": hashlib.sha256(str(alias).encode()).hexdigest()[:16], **details}) + "\n")
 
     def worker(self, request):
+        require_safe_runtime()
+        self.prepare_state()
         platform = request["chat"]["platform"]
         label = "QQ" if platform == "qq" else "微信"
         with file_lock(self.state / "client-access.lock"), file_lock(self.state / (platform + ".lock")):
+            cleanup_scratch(self.state)
             worker_name = "qq_db_worker.py" if platform == "qq" else "wechat_db_worker.py"
             if request.get("operation") == "resolve_group":
                 worker_name = "scope_worker.py"
@@ -186,7 +213,7 @@ class Bridge:
                 try:
                     result = subprocess.run([sys.executable, str(ROOT / "worker_entry.py"), worker_name], input=json.dumps(request, ensure_ascii=False),
                                         capture_output=True, text=True, encoding="utf-8", timeout=self.config.get(platform, {}).get("timeout_seconds", 120),
-                                        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                                        env=worker_environment(),
                                         creationflags=(subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS) if os.name == "nt" else 0)
                 except subprocess.TimeoutExpired:
                     raise BridgeError(label + "操作超时并已终止；临时快照已清理，请重新发起请求") from None
@@ -250,7 +277,8 @@ class Bridge:
                        "start_date": start_date, "end_date": end_date, "keyword": keyword,
                        "binding_digest": starting_binding, "scope": scope, "coverage": coverage,
                        "rows": [{k: v for k, v in row.items() if k != "_qq_segments"} for row in returned]}
-            write_json(self.state / "receipts" / (receipt_id + ".json"), payload)
+            self.prepare_state()
+            write_receipt(self.state / "receipts" / (receipt_id + ".json"), payload)
             public = public_value(payload["rows"])
             self.audit("search", chat_alias, purpose, {"ok": True, "count": len(public), "receipt_id": receipt_id})
             return {"schema": "chat-task-messages/v1", "scope": scope, "receipt_id": receipt_id, "messages": public, "coverage": coverage,
@@ -264,10 +292,13 @@ class Bridge:
         if not isinstance(receipt_id, str) or not re.fullmatch(r"[a-f0-9]{32}", receipt_id):
             raise BridgeError("无效查询凭据")
         try:
-            receipt = load_json(self.state / "receipts" / (receipt_id + ".json"))
+            self.prepare_state()
+            receipt_path = self.state / "receipts" / (receipt_id + ".json")
+            receipt = read_receipt(receipt_path)
         except FileNotFoundError:
             raise BridgeError("查询凭据不存在") from None
         if time.time() - receipt["created_at"] > 3600:
+            receipt_path.unlink(missing_ok=True)
             raise BridgeError("查询凭据已超过一小时，请重新查询")
         chat = self.chat(receipt["chat_alias"])
         if chat != receipt["chat"]:
@@ -303,12 +334,14 @@ class Bridge:
                 p = p.resolve()
                 if not p.is_relative_to(file_target.resolve()) or not p.is_file() or p.stat().st_size > maximum:
                     raise BridgeError("附件路径或大小不符合本次任务范围")
+                mark_download(p)
                 items.append({"path": str(p), "bytes": p.stat().st_size, "sha256": sha256_file(p)})
             manifest = {"receipt_id": receipt_id, "platform": chat["platform"], "chat_alias": receipt["chat_alias"],
                         "message_id": message_id, "attachment_index": attachment_index, "message_time": row["time"], "purpose": receipt["purpose"], "files": items,
                         "saved_at": datetime.now(TZ).isoformat(), "save_method": "client_file_save", "original_bytes_independently_verified": False}
             manifest.update(save_method=result.get("save_method", "local_cache_readonly"), media_tier=result.get("media_tier"),
                             original_bytes_independently_verified=result.get("source_digest_verified", False))
+            manifest.update(content_is_untrusted=True, auto_execute=False, windows_source_zone="internet")
             for key in ("transport", "dimensions", "ciphertext_bytes", "runtime_kernel"):
                 if key in result:
                     manifest[key] = result[key]

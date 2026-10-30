@@ -18,7 +18,7 @@ def main():
                      for p in sorted(vendor.rglob("*")) if p.is_file()
                      and "__pycache__" not in p.parts and p.name != "SHA256SUMS.json"}
     (vendor / "SHA256SUMS.json").write_text(json.dumps(vendor_hashes, indent=2) + "\n", encoding="utf-8")
-    approved = {"README.md", "LICENSE", ".gitignore", "config.example.json", "requirements.txt", "requirements-lock-windows-py310.txt",
+    approved = {"README.md", "LICENSE", ".gitignore", "config.example.json", "requirements.txt", "requirements-lock-windows-py313.txt",
                 "upstream-versions.json", "setup.ps1"}
     paths = [p for p in ROOT.iterdir() if p.is_file() and (p.name in approved or p.suffix == ".py")]
     paths += [p for p in vendor.rglob("*") if p.is_file() and "__pycache__" not in p.parts]

@@ -1,28 +1,28 @@
 # Validation / 验证摘要
 
-Public summary, 2026-10-30. Raw chat records, group identifiers, source messages, configuration and downloaded materials remain private.
+2026-10-30, 0.8.0. Raw chat records, account/group identifiers, credentials, configuration and downloaded samples stay private.
 
 ## Automated checks
 
-80 tests use synthetic data and temporary fixtures: default deny, block precedence, old-receipt revocation, exact group scope, ambiguous names, dates, account checks, temporary cleanup, source digests, media redaction, QQ fixed-command / response validation, committed-WAL handling and original attachment indices. Blocks or account changes arriving during search / download prevent completed results. Unsupported legacy adapters fail before client access.
+99 synthetic tests cover group scope, blocks and account changes during operations, source checks, database/WAL handling, serialized workers and cleanup. Security regressions cover DPAPI encryption/tampering, legacy rejection, expiration, private Windows ACLs, audit redaction, minimal child environments, source-zone marks, raster formats, TLS certificate/name validation, rejection of redirects and no HTTP fallback. A two-range fixture verifies TLS connection reuse and final closure.
 
-The official MCP SDK completes a local stdio handshake, discovers exactly three tools and rejects an unapproved alias. The installed Skill launcher is checked with isolated CLI / MCP fixtures and block / unblock operations. No clients are logged into or read. Local account / block configuration is checked byte-for-byte unchanged.
+The official MCP SDK performs a local stdio handshake and discovers the same three tools. Installed Skill CLI/MCP checks use isolated fixtures, including query/download and revocation after a new block. Python 3.13.18, Pillow 13.0.0 and 34 hash-locked packages are used. Tests require no QQ/WeChat login.
 
-Reader startup lowers only the bridge child process. A real child probe rejects an invalid operation before client access; lock contention rejects a competing reader before spawning. Dependencies and vendored sources are unchanged. The inventory / bundle module and its dedicated tests were removed together in 0.7.0; query / download revocation regressions remain.
+## Real-client regression
 
-## Earlier real-client checks (0.5.x)
+Only the same four previously authorized message samples in the same groups and dates were queried and retrieved. No group/date expansion or attachment execution occurred.
 
-In the validated environment, requests were scoped to two explicitly authorized groups and bounded dates. The same samples were queried again after the client's reported upgrade, then fetched through the skill's real CLI with new receipts.
-
-| Active retrieval | Bytes | Result |
+| Sample | Bytes | Result |
 | --- | ---: | --- |
-| QQ standard group file | 82,832 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
-| QQ image | 105,057 | Source MD5 matched; decoded image 864×1920 |
-| WeChat original image | 2,895,047 | Source size / MD5 matched; decoded image 3213×5712 |
-| WeChat file | 8,394,592 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
+| QQ standard group file | 82,832 | Source SHA256 matched; SSO then HTTPS |
+| QQ image | 105,057 | Source SHA256 matched; HTTPS |
+| WeChat original image | 2,895,047 | Source SHA256 matched; verified HTTPS |
+| WeChat file | 8,394,592 | Source SHA256 matched; verified HTTPS |
 
-QQ and WeChat process IDs / start times and the local configuration remained unchanged during revalidation. Request-temporary directories were empty afterward. No Narrator, window automation, injection or client restart was used. Downloaded files were not executed.
+All retrieved files have Windows Internet-zone marks. Client processes and account/group/block configuration bytes stayed unchanged. The initial per-range TLS implementation timed out on the larger file; per-download connection reuse and bounded larger ranges resolved it. Final WeChat sample operations took about six to seven seconds each in this environment, not a general performance guarantee.
 
-These results establish compatibility for the [listed versions](COMPATIBILITY.md) and sample types, not every version, account state, file type or complete message history. Source archives are checked for private-data exclusions, file hashes and deterministic rebuilds; an extracted default configuration enables no account or group.
+## Local privacy and remaining boundaries
 
-The 0.7.0 simplification uses isolated fixtures instead of repeating real-account reads. No zero-CPU / disk-use claim is made for database queries.
+Local hardening affected only this tool's roots, protected ordinary-user access and removed 28 old/expired query receipts. Current receipts are protected with current-user DPAPI. This is not isolation from administrators or other programs running as the same Windows user. Saved attachments are not automatically deleted or certified virus-free. Cloud model processing is governed by the chosen host/service; Skill/MCP instructions do not create an OS sandbox.
+
+Public source checks exclude local settings, private data and credential-shaped material, verify vendor hashes and relative Markdown links. Reproducible archives are built from the reviewed public commit; see [compatibility](COMPATIBILITY.md) for the tested client versions.

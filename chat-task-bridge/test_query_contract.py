@@ -1,3 +1,4 @@
+from privacy import read_receipt, write_receipt
 """Query scope, attachment indices, account binding and revocation regressions."""
 from pathlib import Path
 import tempfile
@@ -46,7 +47,7 @@ class QueryContractTests(unittest.TestCase):
         self.assertEqual(result["scope"]["timezone"], "Asia/Shanghai")
         self.assertEqual(result["coverage"]["returned"], 1)
         self.assertTrue(result["coverage"]["may_have_more"])
-        stored = load_json(self.bridge.state / "receipts" / (result["receipt_id"] + ".json"))
+        stored = read_receipt(self.bridge.state / "receipts" / (result["receipt_id"] + ".json"))
         self.assertEqual(stored["coverage"], result["coverage"])
         self.assertNotIn("_evidence", result["messages"][0])
 

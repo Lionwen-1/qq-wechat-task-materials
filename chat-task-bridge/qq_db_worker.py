@@ -216,9 +216,8 @@ def fetch(row, request):
         if hashlib.md5(p.read_bytes()).hexdigest().lower() != md5.lower():
             continue
         if attachment["kind"] == "image":
-            from PIL import Image
-            with Image.open(p) as image:
-                image.verify()
+            from privacy import verify_image
+            verify_image(p)
         out = Path(request["target"]) / p.name
         shutil.copyfile(p, out)
         return {"files": [str(out)], "media_tier": "source_verified", "source_digest_verified": True}

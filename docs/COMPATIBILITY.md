@@ -1,6 +1,6 @@
 # Compatibility / 兼容范围
 
-Last checked: 2026-10-30. Windows x64, CPython 3.10.9; pinned dependencies are included as a lock file.
+Last checked: 2026-10-30. Windows x64, CPython 3.13.18; pinned dependencies are included as a lock file.
 
 | Client | Tested version | Verified scope |
 | --- | --- | --- |
@@ -15,3 +15,5 @@ The QQ launcher version can differ from the loaded kernel. Do not infer runtime 
 Client updates fail closed when bindings differ. Revalidate the same account, exact target metadata, database parsing and previously authorized sample downloads before changing a binding. For a new WeChat protocol version, inspect the running client's actual protocol parameter rather than guessing a conversion from its display version. Do not clear blocks or import all groups during adaptation.
 
 首次绑定的主动下载默认关闭，只有 `--active-download` 明确启用后才补取；`--cache-only` 或 MCP `fetch_if_missing=false` 可逐次禁止联网。
+
+0.8.0 uses Pillow 13.0.0 and a Windows/Python 3.13 hash-locked dependency file. The same four previously authorized samples passed on Python 3.13.18; WeChat file/original retrieval used verified HTTPS, with no plaintext fallback. Newer interpreter branches require separate validation.
