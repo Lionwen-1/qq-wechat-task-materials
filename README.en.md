@@ -21,3 +21,5 @@ Download the [latest release](https://github.com/Lionwen-1/qq-wechat-task-materi
 [CLI / MCP integration](qq-wechat-task-materials/references/cli-and-mcp.md) · [Compatible versions](docs/COMPATIBILITY.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 Original code and documentation use the [MIT license](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for component licenses.
+
+If you find this project useful, give it a [⭐ Star](https://github.com/Lionwen-1/qq-wechat-task-materials) to support the creator and future improvements.

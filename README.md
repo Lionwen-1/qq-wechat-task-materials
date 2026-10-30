@@ -21,3 +21,5 @@
 [命令与MCP接入](qq-wechat-task-materials/references/cli-and-mcp.md) · [兼容版本](docs/COMPATIBILITY.md) · [开发说明](CONTRIBUTING.md) · [更新记录](CHANGELOG.md)
 
 原创代码与文档使用[MIT许可证](LICENSE)，第三方组件见[许可说明](THIRD_PARTY_NOTICES.md)。
+
+如果这个项目对你有帮助，欢迎点个 [⭐ Star](https://github.com/Lionwen-1/qq-wechat-task-materials)，支持创作者继续完善它。
