@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — 2026-10-30
+
+- Keep the tool focused on on-demand messages, attachment retrieval and group blocking. Move summaries, organization and deliverables to the host model.
+- Remove `materials` / `task_materials`, their inventory / bundle module and reference; MCP now exposes only status, search and download.
+- Remove the unused legacy NapCat HTTP route and setup helper. Current local `db_readonly` bindings and blocks are preserved; unsupported adapters fail closed.
+- Shorten the Skill and bilingual entry documentation. Known groups search directly; reuse valid receipts and saved files.
+- Retain serial, lower-priority workers and account / version / source / revocation checks. No new dependencies; 80 synthetic tests and MCP transport checks.
+- Upgrade: reconnect the bridge MCP service to refresh tools; no QQ / WeChat restart or login change. Legacy `materials` calls must move to the host model.
+
+
 ## 0.6.0 — 2026-10-30
 
 - Shared CLI / MCP query contract (`chat-task-messages/v1`) with explicit scope, returned bounds and conservative coverage.

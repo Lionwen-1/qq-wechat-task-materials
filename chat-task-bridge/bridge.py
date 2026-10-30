@@ -2,29 +2,23 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import contextlib
 import hashlib
-import importlib.util
-import ipaddress
 import json
 import os
 from pathlib import Path
 import re
 import secrets
-import shutil
-import socket
 import subprocess
 import sys
 import time
 import tempfile
-import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parent
 TZ = timezone(timedelta(hours=8))
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 ATTACHMENT_KINDS = ("all", "any", "image", "file")
 
@@ -120,83 +114,6 @@ def file_lock(path):
                 msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
 
 
-class QQ:
-    ACTIONS = {"get_login_info", "get_group_msg_history", "get_friend_msg_history", "get_file", "get_image"}
-
-    def __init__(self, settings):
-        self.settings = settings
-        self.endpoint = settings.get("endpoint", "http://127.0.0.1:5700").rstrip("/")
-        u = urllib.parse.urlsplit(self.endpoint)
-        if u.scheme != "http" or u.hostname not in {"127.0.0.1", "localhost", "::1"} or u.username or u.password or u.query or u.fragment or u.path not in {"", "/"}:
-            raise BridgeError("QQ API 必须是本机回环 HTTP 地址；远端请先建立 SSH 隧道")
-
-    def call(self, action, params):
-        if action not in self.ACTIONS:
-            raise BridgeError("禁止的 QQ 操作")
-        headers = {"Content-Type": "application/json"}
-        token = os.environ.get(self.settings.get("token_env", "CHAT_BRIDGE_QQ_TOKEN"), "")
-        if token:
-            headers["Authorization"] = "Bearer " + token
-        req = urllib.request.Request(self.endpoint + "/" + action, data=json.dumps(params).encode(), headers=headers)
-        try:
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-            with opener.open(req, timeout=25) as response:
-                raw = response.read(24 * 1024 * 1024 + 1)
-            if len(raw) > 24 * 1024 * 1024:
-                raise BridgeError("QQ API 响应超过限制")
-            result = json.loads(raw)
-        except (OSError, ValueError):
-            raise BridgeError("QQ API 未连接或响应无效；请检查个人账号 NapCat HTTP 端口和令牌") from None
-        if result.get("status") != "ok" or result.get("retcode", 0) != 0:
-            raise BridgeError("QQ API 返回失败；没有把失败解释为无消息")
-        return result.get("data")
-
-    def identity(self):
-        expected = str(self.settings.get("account", ""))
-        if not expected:
-            raise BridgeError("尚未绑定个人 QQ 账号；请在本地配置 qq.account")
-        actual = str(self.call("get_login_info", {}).get("user_id", ""))
-        if actual != expected:
-            raise BridgeError("QQ 登录账号与绑定账号不符，已停止")
-        return actual
-
-    def history(self, chat, limit, keyword):
-        self.identity()
-        action, key = ("get_group_msg_history", "group_id") if chat["kind"] == "group" else ("get_friend_msg_history", "user_id")
-        rows, seen, cursor, exhausted = [], set(), None, False
-        while len(rows) < limit:
-            params = {key: chat["id"], "count": min(50, limit - len(rows)), "reverse_order": False,
-                      "disable_get_url": True, "parse_mult_msg": False, "quick_reply": False}
-            if cursor:
-                params["message_seq"] = cursor
-            page = (self.call(action, params) or {}).get("messages", [])
-            fresh = [r for r in page if str(r.get("message_id")) not in seen]
-            if not fresh:
-                exhausted = True
-                break
-            for r in fresh:
-                seen.add(str(r.get("message_id")))
-                segments = r.get("message", [])
-                attachments = []
-                text = []
-                if isinstance(segments, str):
-                    text.append(segments)
-                else:
-                    for segment in segments:
-                        kind, data = segment.get("type"), segment.get("data", {})
-                        if kind == "text":
-                            text.append(data.get("text", ""))
-                        elif kind in {"image", "file", "video", "record"}:
-                            text.append("[" + kind + "] " + data.get("name", ""))
-                            attachments.append({"kind": kind, "file": data.get("file_id") or data.get("file"), "name": data.get("name", "")})
-                sender = r.get("sender") or {}
-                rows.append({"id": str(r.get("message_id")), "time": r.get("time"), "sender": sender.get("card") or sender.get("nickname") or str(r.get("user_id", "")),
-                             "text": "".join(text), "attachments": attachments, "kind": "message"})
-            oldest = min(page, key=lambda r: (r.get("time", 0), str(r.get("message_id", ""))))
-            cursor = str(oldest.get("message_id", ""))
-        return rows[:limit], {"upstream_exhausted": exhausted, "source": "napcat", "date_filter": "local"}
-
-
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise BridgeError("下载地址发生跳转；未自动访问新地址")
@@ -208,50 +125,6 @@ def sha256_file(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def save_qq_attachment(settings, attachment, target, maximum):
-    qq = QQ(settings)
-    qq.identity()
-    file_id = attachment.get("file")
-    if not file_id:
-        raise BridgeError("此消息没有可用附件标识")
-    data = qq.call("get_image" if attachment["kind"] == "image" else "get_file", {"file": file_id})
-    name = data.get("file_name") or attachment.get("name") or ("image" if attachment["kind"] == "image" else "attachment")
-    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", Path(name).name).strip(" .")[:150] or "attachment"
-    if name.split(".")[0].upper() in {"CON", "NUL", "AUX", "PRN", *("COM" + str(i) for i in range(1, 10)), *("LPT" + str(i) for i in range(1, 10))}:
-        name = "_" + name
-    destination = target / name
-    if data.get("base64"):
-        body = base64.b64decode(data["base64"], validate=True)
-        if len(body) > maximum:
-            raise BridgeError("附件超过大小上限")
-        destination.write_bytes(body)
-    else:
-        source = data.get("file", "")
-        roots = [Path(p).resolve() for p in settings.get("media_roots", [])]
-        p = Path(source).resolve() if source else None
-        if p and p.is_file() and any(p.is_relative_to(root) for root in roots):
-            if p.stat().st_size > maximum:
-                raise BridgeError("附件超过大小上限")
-            shutil.copyfile(p, destination)
-        else:
-            u = urllib.parse.urlsplit(data.get("url", ""))
-            host = (u.hostname or "").lower()
-            if u.scheme not in {"http", "https"} or u.username or u.password or u.port not in {None, 80, 443} or not any(host == x or host.endswith("." + x) for x in ("qq.com", "qpic.cn", "gtimg.cn")):
-                raise BridgeError("附件只有服务端路径或不支持的地址；请配置本机 QQ media_roots，未跨盘搜索")
-            addresses = socket.getaddrinfo(host, u.port or (443 if u.scheme == "https" else 80))
-            if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
-                raise BridgeError("附件地址解析到非公网地址")
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-            with opener.open(data["url"], timeout=40) as response, destination.open("xb") as stream:
-                total = 0
-                while chunk := response.read(1024 * 1024):
-                    total += len(chunk)
-                    if total > maximum:
-                        raise BridgeError("附件超过大小上限")
-                    stream.write(chunk)
-    return [destination]
 
 
 class Bridge:
@@ -275,6 +148,8 @@ class Bridge:
             raise BridgeError("该会话已被屏蔽，拒绝读取或下载")
         if not self.config.get(chat["platform"], {}).get("enabled", False):
             raise BridgeError("此平台接入尚未启用")
+        if self.config[chat["platform"]].get("backend", "db_readonly") != "db_readonly":
+            raise BridgeError("仅支持 db_readonly 接入；请使用 bind_local.py 绑定本机客户端")
         return dict(chat)
 
     def status(self):
@@ -282,14 +157,14 @@ class Bridge:
         return {"version": VERSION, "mode": "on_demand_read_only", "background_listener": False,
                 "qq_enabled": self.config.get("qq", {}).get("enabled", False),
                 "wechat_enabled": self.config.get("wechat", {}).get("enabled", False),
-                "backends": {p: self.config.get(p, {}).get("backend", "napcat" if p == "qq" else "db_readonly") for p in ("qq", "wechat")},
+                "backends": {p: self.config.get(p, {}).get("backend", "db_readonly") for p in ("qq", "wechat")},
                 "active_download_enabled": {p: self.config.get(p, {}).get("active_download", False) for p in ("qq", "wechat")},
                 "active_download_capabilities": {"qq": ["image", "group_file"], "wechat": ["image", "file"]},
                 "qq_group_file_kernel_binding": self.config.get("qq", {}).get("group_file_kernel", {}).get("version"),
                 "client_access": {"max_concurrent_requests": 1, "worker_cpu_priority": "below_normal",
                                   "worker_io_priority": "very_low", "lock_scope": "configured_state_directory", "client_window_operations": False,
                                   "note": "只降低本桥子进程优先级；数据库查询仍有CPU/磁盘I/O，不保证零资源占用"},
-                "schemas": {"messages": "chat-task-messages/v1", "materials": "chat-task-materials/v1"},
+                "schemas": {"messages": "chat-task-messages/v1"},
                 "allowed_chats": [{"alias": k, "platform": v["platform"], "name": v.get("name", k)} for k, v in self.config.get("chats", {}).items()
                                   if not blocked_rules(self.config, k, v)],
                 "note": "状态仅检查配置，不读取 QQ／微信消息；允许名单不表示已实机验证"}
@@ -339,13 +214,9 @@ class Bridge:
         chat = self.chat(chat_alias)
         starting_binding = binding_digest(self.config, chat["platform"])
         try:
-            if chat["platform"] == "qq" and self.config["qq"].get("backend") != "db_readonly":
-                with file_lock(self.state / "client-access.lock"):
-                    rows, coverage = QQ(self.config["qq"]).history(chat, scan_limit, keyword)
-            else:
-                result = self.worker({"operation": "search", "chat": chat, "settings": self.config[chat["platform"]], "scan_limit": scan_limit, "keyword": keyword,
-                                      "start_date": start_date, "end_date": end_date})
-                rows, coverage = result["rows"], result["coverage"]
+            result = self.worker({"operation": "search", "chat": chat, "settings": self.config[chat["platform"]], "scan_limit": scan_limit, "keyword": keyword,
+                                  "start_date": start_date, "end_date": end_date})
+            rows, coverage = result["rows"], result["coverage"]
             selected, unknown = [], 0
             observed_times = []
             for row in rows:
@@ -405,11 +276,6 @@ class Bridge:
             raise BridgeError("账号绑定已变化或查询凭据版本过旧，请重新查询")
         return receipt, chat
 
-    def materials(self, receipt_id, message_ids=None, write_bundle=False):
-        from material_bundle import prepare
-        with file_lock(self.state / "client-access.lock"):
-            return prepare(self, receipt_id, message_ids, write_bundle)
-
     def fetch(self, receipt_id, message_id, attachment_index=0, image_tier="received", fetch_if_missing=True):
         if image_tier not in {"received", "original", "thumbnail", "best_available"}:
             raise BridgeError("不支持的图片版本")
@@ -420,21 +286,16 @@ class Bridge:
         if attachment_index not in matches[0].get("matched_attachment_indices", []):
             raise BridgeError("附件不在本次附件类型筛选结果中")
         row = matches[0]
-        attachment = row["attachments"][attachment_index]
         target = self.output / receipt_id / (attachment_key(message_id, attachment_index) + "-" + secrets.token_hex(4))
         target.mkdir(parents=True)
         file_target = target / "files"
         file_target.mkdir()
         maximum = min(int(self.config.get("max_attachment_mb", 100)), 500) * 1024 * 1024
         try:
-            if chat["platform"] == "qq" and self.config["qq"].get("backend") != "db_readonly":
-                with file_lock(self.state / "client-access.lock"):
-                    files = save_qq_attachment(self.config["qq"], attachment, file_target, maximum)
-            else:
-                result = self.worker({"operation": "fetch", "chat": chat, "settings": self.config[chat["platform"]], "row": row, "target": str(file_target), "scan_limit": 500,
-                                      "maximum_bytes": maximum, "image_tier": image_tier, "attachment_index": attachment_index,
-                                      "fetch_if_missing": bool(fetch_if_missing)})
-                files = [Path(p) for p in result["files"]]
+            result = self.worker({"operation": "fetch", "chat": chat, "settings": self.config[chat["platform"]], "row": row, "target": str(file_target), "scan_limit": 500,
+                                  "maximum_bytes": maximum, "image_tier": image_tier, "attachment_index": attachment_index,
+                                  "fetch_if_missing": bool(fetch_if_missing)})
+            files = [Path(p) for p in result["files"]]
             if not files:
                 raise BridgeError("客户端未生成附件文件；可能已过期或未下载")
             items = []
@@ -446,12 +307,11 @@ class Bridge:
             manifest = {"receipt_id": receipt_id, "platform": chat["platform"], "chat_alias": receipt["chat_alias"],
                         "message_id": message_id, "attachment_index": attachment_index, "message_time": row["time"], "purpose": receipt["purpose"], "files": items,
                         "saved_at": datetime.now(TZ).isoformat(), "save_method": "client_file_save", "original_bytes_independently_verified": False}
-            if self.config[chat["platform"]].get("backend") == "db_readonly":
-                manifest.update(save_method=result.get("save_method", "local_cache_readonly"), media_tier=result.get("media_tier"),
-                                original_bytes_independently_verified=result.get("source_digest_verified", False))
-                for key in ("transport", "dimensions", "ciphertext_bytes", "runtime_kernel"):
-                    if key in result:
-                        manifest[key] = result[key]
+            manifest.update(save_method=result.get("save_method", "local_cache_readonly"), media_tier=result.get("media_tier"),
+                            original_bytes_independently_verified=result.get("source_digest_verified", False))
+            for key in ("transport", "dimensions", "ciphertext_bytes", "runtime_kernel"):
+                if key in result:
+                    manifest[key] = result[key]
             self.receipt(receipt_id)
             write_json(target / "source.json", manifest)
             self.audit("fetch", receipt["chat_alias"], receipt["purpose"], {"ok": True, "receipt_id": receipt_id, "count": len(items)})
@@ -480,10 +340,6 @@ def main():
     fetch.add_argument("--index", type=int, default=0)
     fetch.add_argument("--image-tier", choices=["received", "original", "thumbnail", "best_available"], default="received")
     fetch.add_argument("--cache-only", action="store_true", help="Never fetch uncached attachments from the network")
-    materials = sub.add_parser("materials")
-    materials.add_argument("--receipt", required=True)
-    materials.add_argument("--message", action="append", dest="message_ids")
-    materials.add_argument("--write-bundle", action="store_true", help="Export only verified existing downloads; no client or network access")
     args = parser.parse_args()
     try:
         bridge = Bridge(args.config)
@@ -491,8 +347,6 @@ def main():
             result = bridge.status()
         elif args.command == "search":
             result = bridge.search(args.chat, args.start, args.end, args.keyword, args.purpose, args.scan_limit, args.result_limit, args.attachment_kind)
-        elif args.command == "materials":
-            result = bridge.materials(args.receipt, args.message_ids, args.write_bundle)
         else:
             result = bridge.fetch(args.receipt, args.message, args.index, args.image_tier, not args.cache_only)
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=False, indent=2))

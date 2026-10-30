@@ -10,8 +10,6 @@
     "executable": "",
     "client_version": "9.9.35.52892",
     "db_path": "",
-    "endpoint": "http://127.0.0.1:5700",
-    "token_env": "CHAT_BRIDGE_QQ_TOKEN",
     "account": "",
     "media_roots": []
   },

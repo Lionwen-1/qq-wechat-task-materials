@@ -1,10 +1,8 @@
-import copy
-import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from bridge import Bridge, BridgeError, QQ, load_json, parse_time, write_json
+from bridge import Bridge, BridgeError, load_json, parse_time, write_json
 
 
 class BridgeTests(unittest.TestCase):
@@ -13,7 +11,7 @@ class BridgeTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.path = self.root / "config.json"
         self.config = load_json(Path(__file__).with_name("config.example.json"))
-        self.config["qq"].update(enabled=True, account="42", backend="napcat")
+        self.config["qq"].update(enabled=True, account="42", backend="db_readonly")
         self.config["chats"]["sample"] = {"platform": "qq", "kind": "group", "id": "100", "name": "sample"}
         write_json(self.path, self.config)
         self.bridge = Bridge(self.path)
@@ -22,7 +20,7 @@ class BridgeTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_default_denies_before_adapter(self):
-        with patch.object(QQ, "history") as source:
+        with patch.object(self.bridge, "worker") as source:
             with self.assertRaises(BridgeError):
                 self.bridge.search("excluded", "2026-10-01", "2026-10-02", "", "test")
             source.assert_not_called()
@@ -31,7 +29,7 @@ class BridgeTests(unittest.TestCase):
         self.config["chats"]["renamed"] = self.config["chats"]["sample"]
         self.config["blocked"] = ["qq:group:100"]
         write_json(self.path, self.config)
-        with patch.object(QQ, "history") as source:
+        with patch.object(self.bridge, "worker") as source:
             for alias in ["sample", "renamed"]:
                 with self.assertRaises(BridgeError):
                     self.bridge.search(alias, "2026-10-01", "2026-10-02", "", "test")
@@ -43,7 +41,7 @@ class BridgeTests(unittest.TestCase):
             {"id": "m2", "time": "2026-09-30T10:00:00+08:00", "text": "report", "attachments": []},
             {"id": "m3", "time": None, "text": "report", "attachments": []},
         ]
-        with patch.object(QQ, "history", return_value=(rows, {})):
+        with patch.object(self.bridge, "worker", return_value={"rows": rows, "coverage": {}}):
             return self.bridge.search("sample", "2026-10-01", "2026-10-02", "report", "test")
 
     def test_date_filter_unknown_exclusion_and_private_evidence(self):
@@ -60,7 +58,7 @@ class BridgeTests(unittest.TestCase):
         receipt = self.search_fixture()["receipt_id"]
         self.config["blocked"] = ["qq:group:100"]
         write_json(self.path, self.config)
-        with patch("bridge.save_qq_attachment") as download:
+        with patch.object(self.bridge, "worker") as download:
             with self.assertRaises(BridgeError):
                 self.bridge.fetch(receipt, "m1")
             download.assert_not_called()
@@ -82,32 +80,28 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(BridgeError):
             self.bridge.fetch(receipt, "m1")
 
-    def test_account_mismatch_prevents_history(self):
-        qq = QQ(self.config["qq"])
-        with patch.object(qq, "call", return_value={"user_id": 43}) as upstream:
-            with self.assertRaises(BridgeError):
-                qq.history(self.config["chats"]["sample"], 50, "")
-            self.assertEqual([c.args[0] for c in upstream.call_args_list], ["get_login_info"])
-
     def test_download_hash_and_source_manifest(self):
         receipt = self.search_fixture()["receipt_id"]
 
-        def save(settings, attachment, target, maximum):
+        def save(request):
+            target = Path(request["target"])
             p = target / "task.txt"
             p.write_bytes(b"fixture")
-            return [p]
+            return {"files": [str(p)]}
 
-        with patch("bridge.save_qq_attachment", side_effect=save):
+        with patch.object(self.bridge, "worker", side_effect=save):
             result = self.bridge.fetch(receipt, "m1")
         self.assertEqual(result["files"][0]["bytes"], 7)
         self.assertEqual(len(result["files"][0]["sha256"]), 64)
         self.assertTrue((Path(result["files"][0]["path"]).parent.parent / "source.json").is_file())
 
-    def test_only_loopback_and_read_actions(self):
-        with self.assertRaises(BridgeError):
-            QQ({"endpoint": "http://example.com:5700"})
-        with self.assertRaises(BridgeError):
-            QQ(self.config["qq"]).call("send_group_msg", {})
+    def test_unsupported_backend_denied_before_client_access(self):
+        self.config["qq"]["backend"] = "unsupported"
+        write_json(self.path, self.config)
+        with patch.object(self.bridge, "worker") as source:
+            with self.assertRaises(BridgeError):
+                self.bridge.search("sample", "2026-10-01", "2026-10-02", "", "test")
+            source.assert_not_called()
 
     def test_chinese_timestamps(self):
         self.assertEqual(parse_time("2026年10月2日 09:24").isoformat(), "2026-10-02T09:24:00+08:00")

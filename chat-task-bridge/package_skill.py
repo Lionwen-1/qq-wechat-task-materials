@@ -10,7 +10,7 @@ import zipfile
 
 from bridge import ROOT, VERSION
 
-SKILL_FILES = ("SKILL.md", "LICENSE", "agents/openai.yaml", "references/cli-and-mcp.md", "references/materials.md",
+SKILL_FILES = ("SKILL.md", "LICENSE", "agents/openai.yaml", "references/cli-and-mcp.md",
                "scripts/chat_materials.py", "runtime.example.json")
 
 
