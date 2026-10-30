@@ -18,8 +18,8 @@ In the validated environment, requests were scoped to two explicitly authorized 
 | --- | ---: | --- |
 | QQ standard group file | 82,832 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
 | QQ image | 105,057 | Source MD5 matched; decoded image 864×1920 |
-| WeChat original image | 2,896,047 | Source size / MD5 matched; decoded image 3213×5712 |
-| WeChat file | 8,396,592 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
+| WeChat original image | 2,895,047 | Source size / MD5 matched; decoded image 3213×5712 |
+| WeChat file | 8,394,592 | Source size / MD5 matched; SHA256 matched the previously verified same sample |
 
 QQ and WeChat process IDs / start times and the local configuration remained unchanged during revalidation. Request-temporary directories were empty afterward. No Narrator, window automation, injection or client restart was used. Downloaded files were not executed.
 
