@@ -1,7 +1,17 @@
 param([string]$EnvironmentDirectory = "$PSScriptRoot\.venv", [string]$PythonExecutable = 'python')
 $ErrorActionPreference = 'Stop'
-& $PythonExecutable -c "import sys; assert sys.version_info[:2] == (3, 13) and sys.version_info[:3] >= (3, 13, 18), '请使用 Python 3.13.18 或本分支更新的安全版本'"
-if ($LASTEXITCODE -ne 0) { throw 'Python 版本不符合已验证环境' }
+$runtimeReady = $false
+try {
+    & $PythonExecutable -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 13) and sys.version_info[:3] >= (3, 13, 18) else 1)" 2>$null
+    $runtimeReady = $LASTEXITCODE -eq 0
+} catch { $runtimeReady = $false }
+if (-not $runtimeReady) {
+    $PythonExecutable = & "$PSScriptRoot\install-python.ps1"
+}
+if (Test-Path -LiteralPath (Join-Path $EnvironmentDirectory 'pyvenv.cfg')) {
+    & (Join-Path $EnvironmentDirectory 'Scripts\python.exe') -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 13) and sys.version_info[:3] >= (3, 13, 18) else 1)"
+    if ($LASTEXITCODE -ne 0) { throw '原环境版本过旧，请通过EnvironmentDirectory指定新的本工具环境目录；未删除旧环境' }
+}
 & $PythonExecutable -m venv $EnvironmentDirectory
 if ($LASTEXITCODE -ne 0) { throw '创建 Python 环境失败' }
 $bridgePython = Join-Path $EnvironmentDirectory 'Scripts\python.exe'

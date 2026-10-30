@@ -7,7 +7,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE_NAMES = {"config.local.json", "runtime.local.json", ".env"}
-PRIVATE_DIRS = {"state", "downloads", "materials", "private-state", "receipts", "work", ".venv"}
+PRIVATE_DIRS = {"state", "downloads", "materials", "private-state", "receipts", "work", ".venv", ".python"}
 TOKEN = re.compile(rb"(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)")
 
 

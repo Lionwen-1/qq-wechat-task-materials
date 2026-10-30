@@ -14,3 +14,5 @@ The QQ-TEA source is included unchanged and dynamically loaded as an independent
 Detailed file attribution: [`vendor/NOTICE.md`](chat-task-bridge/vendor/NOTICE.md). Integrity inventory: [`vendor/SHA256SUMS.json`](chat-task-bridge/vendor/SHA256SUMS.json). Other public protocol / layout references and all pinned revisions: [`upstream-versions.json`](chat-task-bridge/upstream-versions.json).
 
 Pinned Python dependencies are installed separately and retain their own distribution licenses. QQ, WeChat and their names / marks belong to their respective owners; this is an independent project.
+
+The optional Python bootstrap downloads a SHA256-pinned [Astral standalone CPython build](https://github.com/astral-sh/python-build-standalone/releases/tag/20261026). Python/PSF and bundled component license files remain in that installed distribution; interpreter binaries are not included in the project source ZIP.

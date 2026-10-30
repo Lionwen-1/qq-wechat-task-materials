@@ -1,6 +1,6 @@
 {
   "checked_on": "2026-10-30 Asia/Shanghai",
-  "python_tested": "3.10.9 Windows x64",
+  "python_tested": "3.13.18 Windows x64",
   "wechat_client": "4.2.0.9",
   "qq_client": "9.9.35.52892",
   "qq_runtime_kernel": "9.9.36-53644",
@@ -18,8 +18,8 @@
   },
   "native_sqlcipher_wheel": {
     "distribution": "sqlcipher3-wheels==0.5.7",
-    "filename": "sqlcipher3_wheels-0.5.7-cp310-cp310-win_amd64.whl",
-    "sha256": "0ec965564c43e3cd0d2e93530467d9b1a1ef379c98afa0cc349b142777ab7928"
+    "filename": "sqlcipher3_wheels-0.5.7-cp313-cp313-win_amd64.whl",
+    "sha256": "3cd95c309984e01fa456417058dec87ca8baf01ec419ed5eaa734fed2d22ec53"
   },
   "mcp_sdk": "mcp==2.3.0",
   "wechat_cdn_reference": {
@@ -58,5 +58,11 @@
   "wechat_cdn_version_tokens": {
     "4.1.15.56": "0xf2540f38",
     "4.2.0.9": "0xf2544009"
+  },
+  "python_runtime": {
+    "distribution": "astral-sh/python-build-standalone",
+    "release": "20261026",
+    "version": "3.13.18",
+    "sha256": "7369f7a35f261222a6ac8b3a87c1c88eeebee8af945d85346202591a64038dd3"
   }
 }

@@ -12,7 +12,7 @@
 ./.venv/Scripts/python.exe bind_local.py --qq-group 123456789 --wechat-chat '课程群完整名称' --active-download
 ```
 
-安装不读消息。首次绑定只探查已登录本人账号、版本与指定群资料；不会导入所有群。首次主动下载默认关闭，`--active-download` 明确启用。本程序配置、state和downloads属于私人数据，不分享或提交。
+setup会复用符合要求的Python，否则下载并核对固定运行环境到本工具的.python目录；不修改全局PATH或注册表。安装不读消息。首次绑定只探查已登录本人账号、版本与指定群资料；不会导入所有群。首次主动下载默认关闭，`--active-download` 明确启用。本程序配置、state和downloads属于私人数据，不分享或提交。
 
 ## 按任务调用
 
