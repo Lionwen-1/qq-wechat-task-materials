@@ -8,16 +8,60 @@ No login, client injection, screen reader, UI, or persistent credential cache.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import ipaddress
 import os
 from pathlib import Path
 import re
 import struct
+import socket
+import ssl
 import time
-import urllib.error
-import urllib.request
 
 from bridge import BridgeError
+
+TLS_SERVER_NAME = "wxs.qq.com"
+
+
+class RouteHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to the account's route IP but verify Tencent's TLS hostname."""
+    def __init__(self, endpoint, timeout):
+        super().__init__(TLS_SERVER_NAME, timeout=timeout, context=ssl.create_default_context())
+        self.endpoint = endpoint
+
+    def connect(self):
+        stream = socket.create_connection((self.endpoint, 443), timeout=self.timeout)
+        try:
+            self.sock = self._context.wrap_socket(stream, server_hostname=TLS_SERVER_NAME)
+        except Exception:
+            stream.close()
+            raise
+
+
+def https_post(endpoint, body, timeout, sequence=1, connections=None):
+    cache = connections if connections is not None else {}
+    connection = cache.get(endpoint)
+    if connection is None:
+        connection = cache[endpoint] = RouteHTTPSConnection(endpoint, timeout)
+    connection.timeout = timeout
+    if connection.sock is not None:
+        connection.sock.settimeout(timeout)
+    try:
+        connection.request("POST", "/download", body=body, headers={
+            "Content-Type": "application/octet-stream", "User-Agent": "MicroMessenger Client",
+            "Connection": "keep-alive", "C-Seq": str(sequence), "Host": endpoint + ":443"})
+        response = connection.getresponse()
+        if response.status != 200:
+            raise BridgeError("CDN HTTPS状态 " + str(response.status))
+        return response.read(2 * 1024 * 1024 + 1)
+    except Exception:
+        connection.close()
+        cache.pop(endpoint, None)
+        raise
+    finally:
+        if connections is None and endpoint in cache:
+            connection.close()
+            cache.pop(endpoint, None)
 
 
 def varint(data, offset):
@@ -162,12 +206,16 @@ def number(fields, key):
     return int(value)
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs):
-        return None
-
-
 def download(route, descriptor, deadline, maximum, client_version, client_os=b"UnifiedPCWin"):
+    connections = {}
+    try:
+        return _download(route, descriptor, deadline, maximum, client_version, client_os, connections)
+    finally:
+        for connection in connections.values():
+            connection.close()
+
+
+def _download(route, descriptor, deadline, maximum, client_version, client_os, connections):
     """Return bytes only after all range, AES-padding, size and digest checks."""
     from cryptography.hazmat.primitives import padding
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -186,14 +234,13 @@ def download(route, descriptor, deadline, maximum, client_version, client_os=b"U
         "sourceflag": 0, "wxautostart": 0, "downpicformat": 4,
     }.items()}
     fields.update(clientostype=client_os, authkey=route["auth"], wxmsgflag=b"", fileid=descriptor["fileid"].encode())
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     encrypted, sequence, representation = bytearray(), 0, None
     while total is None or len(encrypted) < total:
         sequence += 1
         if sequence > (limit + 65535) // 65536:
             raise BridgeError("CDN 传输次数超过附件上限")
         start = len(encrypted)
-        end = start + 65535 if total is None else min(start + 65535, total - 1)
+        end = start + 262143 if total is None else min(start + 262143, total - 1)
         fields.update(seq=str(sequence).encode(), rangestart=str(start).encode(), rangeend=str(end).encode())
         body, reply = pack_fields(fields), None
         for endpoint in route["server_ips"]:
@@ -203,21 +250,13 @@ def download(route, descriptor, deadline, maximum, client_version, client_os=b"U
             ip = ipaddress.IPv4Address(endpoint)
             if not ip.is_global or ip.is_multicast:
                 raise BridgeError("CDN 端点不是公网地址")
-            req = urllib.request.Request("http://" + str(ip) + ":443/download", data=body,
-                headers={"Content-Type": "application/octet-stream", "User-Agent": "MicroMessenger Client",
-                         "Connection": "close", "C-Seq": str(sequence)}, method="POST")
             try:
-                with opener.open(req, timeout=min(10, remaining)) as response:
-                    if response.status != 200:
-                        raise BridgeError("CDN HTTP 状态 " + str(response.status))
-                    reply = unpack_fields(response.read(2 * 1024 * 1024 + 1))
+                reply = unpack_fields(https_post(str(ip), body, min(10, remaining), sequence, connections))
                 break
-            except urllib.error.HTTPError as exc:
-                raise BridgeError("CDN HTTP 状态 " + str(exc.code)) from None
-            except (urllib.error.URLError, TimeoutError, ConnectionError):
+            except (OSError, http.client.HTTPException):
                 continue
         if reply is None:
-            raise BridgeError("当前账号的 CDN 端点均未能连接")
+            raise BridgeError("当前账号CDN安全连接不可用；未回退到明文传输")
         code = number(reply, "retcode")
         if code:
             raise BridgeError("CDN 下载返回 " + str(code) + "；附件可能过期或当前路由不可用")
@@ -245,5 +284,5 @@ def download(route, descriptor, deadline, maximum, client_version, client_os=b"U
     matches = len(plain) == size and hashlib.md5(plain).hexdigest() == descriptor["md5"]
     if not 0 < len(plain) <= maximum or exact and not matches:
         raise BridgeError("CDN 附件与原始消息的大小或 MD5 不符")
-    return plain, {"transport": "wechat_cdn", "source_digest_verified": matches,
+    return plain, {"transport": "wechat_https_cdn", "source_digest_verified": matches,
                    "ciphertext_bytes": len(encrypted), **representation}

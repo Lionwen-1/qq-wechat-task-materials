@@ -52,7 +52,7 @@ class Response:
 
 class CDNTests(unittest.TestCase):
     def setUp(self):
-        self.plain = b"synthetic source bytes" * 4000
+        self.plain = b"synthetic source bytes" * 20000
         key = b"k" * 16
         pad = padding.PKCS7(128).padder()
         padded = pad.update(self.plain) + pad.finalize()
@@ -63,25 +63,34 @@ class CDNTests(unittest.TestCase):
                            "fileid": "synthetic-file", "md5": hashlib.md5(self.plain).hexdigest()}
         self.requests = []
 
-    def reply(self, req, **kwargs):
-        fields = unpack_fields(req.data)
+    def reply(self, endpoint, body, timeout, sequence=1, connections=None):
+        fields = unpack_fields(body)
         self.requests.append(fields)
         start, end = int(fields["rangestart"]), int(fields["rangeend"])
         block = self.encrypted[start:end + 1]
-        return Response(pack_fields({"retcode": b"0", "seq": fields["seq"],
+        return pack_fields({"retcode": b"0", "seq": fields["seq"],
             "rangestart": str(start).encode(), "rangeend": str(start + len(block) - 1).encode(),
-            "totalsize": str(len(self.encrypted)).encode(), "filedata": block}))
+            "totalsize": str(len(self.encrypted)).encode(), "filedata": block})
 
     def run_download(self, effect=None):
-        with patch("wechat_cdn.urllib.request.build_opener") as factory:
-            factory.return_value.open.side_effect = effect or self.reply
+        with patch("wechat_cdn.https_post", side_effect=effect or self.reply):
             return download(self.route, self.descriptor, time.monotonic() + 5, 1024 * 1024, 123)
 
     def test_multirange_aes_padding_and_message_digest(self):
         actual, result = self.run_download()
         self.assertEqual(actual, self.plain)
         self.assertTrue(result["source_digest_verified"])
-        self.assertEqual([int(r["rangestart"]) for r in self.requests], [0, 65536])
+        self.assertEqual([int(r["rangestart"]) for r in self.requests], [0, 262144])
+
+    def test_tls_connection_is_reused_and_closed_at_end_of_download(self):
+        with patch("wechat_cdn.RouteHTTPSConnection") as factory:
+            connection = factory.return_value
+            connection.getresponse.side_effect = lambda: Response(self.reply("8.8.8.8", connection.request.call_args.kwargs["body"], 1))
+            actual, _ = download(self.route, self.descriptor, time.monotonic() + 5, 1024 * 1024, 123)
+            self.assertEqual(actual, self.plain)
+            self.assertEqual(factory.call_count, 1)
+            self.assertEqual(connection.request.call_count, 2)
+            connection.close.assert_called_once()
 
     def test_wrong_message_digest_never_returns_bytes(self):
         self.descriptor["md5"] = "0" * 32
@@ -89,22 +98,21 @@ class CDNTests(unittest.TestCase):
             self.run_download()
 
     def test_bad_sequence_never_returns_bytes(self):
-        def wrong(req, **kw):
-            response = self.reply(req)
-            fields = unpack_fields(response.raw)
+        def wrong(*args):
+            fields = unpack_fields(self.reply(*args))
             fields["seq"] = b"99"
-            return Response(pack_fields(fields))
+            return pack_fields(fields)
         with self.assertRaises(BridgeError):
             self.run_download(wrong)
 
     def test_expired_server_result_is_an_error(self):
-        def expired(req, **kw):
-            return Response(pack_fields({"retcode": b"-510305"}))
+        def expired(*args):
+            return pack_fields({"retcode": b"-510305"})
         with self.assertRaisesRegex(BridgeError, "-510305"):
             self.run_download(expired)
 
     def test_oversize_rejected_before_network(self):
-        with patch("wechat_cdn.urllib.request.build_opener") as factory:
+        with patch("wechat_cdn.https_post") as factory:
             with self.assertRaises(BridgeError):
                 download(self.route, self.descriptor, time.monotonic() + 5, 100, 123)
             factory.assert_not_called()
