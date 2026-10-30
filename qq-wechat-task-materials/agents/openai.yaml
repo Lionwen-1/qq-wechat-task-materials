@@ -1,4 +1,4 @@
 interface:
   display_name: "QQ微信按需取材"
-  short_description: "按群名和任务取得所需消息、文件与原图，少步骤调用并保留群聊屏蔽"
+  short_description: "按群名和任务查找QQ微信消息，下载文件和原图，管理群聊屏蔽"
   default_prompt: "使用 $qq-wechat-task-materials 从指定群查找任务消息，取回必要文件和原图，再直接完成用户任务。"
